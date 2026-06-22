@@ -1,6 +1,6 @@
 # EMBGuard
 
-EMBGuard is a comprehensive safety guardrail evaluation framework for embodied agents operating in physical environments. It provides tools for dataset generation, model training, evaluation, and visualization to assess vision-language models (VLMs) on their ability to detect and assess safety risks in visual scenes.
+EMBGuard is a hazard-aware guardrail framework for safe planning in embodied agents. It provides tools for constructing safety datasets, training guardrail models, evaluating vision-language models (VLMs), and analyzing whether models identify physical hazards and risk conditions in embodied scenes.
 
 ## 📦 Datasets on Hugging Face
 
@@ -27,6 +27,17 @@ All EMBGuard datasets and modelsare available on Hugging Face:
 - `EMBGuard/EMBGuard-4B` - 4B parameter model
 - `EMBGuard/EMBGuard-8B` - 8B parameter model
 - Various LoRA fine-tuned variants
+
+## Terminology
+
+EMBGuardTest is organized around four evaluation conditions:
+
+- **Causal Risky**: A hazard is present and causally relevant to the action, so the scene should be judged unsafe.
+- **Selective Risky**: Multiple hazards or hazard candidates are present, and the model must identify the action-relevant risky condition.
+- **Decoupled Benign**: A hazard-like element is present but decoupled from the action, so the scene should be judged safe.
+- **Absent Benign**: The hazard is absent, so the scene should be judged safe.
+
+The Hugging Face split names are `causal_risky`, `selective_risky`, `decoupled_benign`, and `absent_benign`. Legacy aliases (`HR`, `MHR`, `HNR`, `NHR`) are still accepted for backward compatibility.
 
 ## 🚀 Quick Start
 
@@ -486,9 +497,16 @@ Configure workers for parallel inference:
 If you use EMBGuard in your research, please cite:
 
 ```bibtex
-Not yet available
+@article{choi2026embguard,
+  title={EMBGuard: Constructing Hazard-Aware Guardrails for Safe Planning in Embodied Agents},
+  author={Choi, Dongwook and Kwon, Taeyoon and Jeong, Bogyung and Kim, Minju and Hwang, Yeonjun and Kim, Hyojun and Kim, Byungchul and Jang, Young Kyun and Yeo, Jinyoung},
+  journal={arXiv preprint arXiv:2605.30924},
+  year={2026}
+}
 ```
 
 ## 📄 License
 
-[Add your license information here]
+The code in this repository is released under the [MIT License](LICENSE).
+
+Datasets, model weights, and third-party components may be subject to their own licenses or the licenses of their underlying sources. Please check the corresponding Hugging Face dataset/model cards and third-party repositories before redistribution or commercial use.

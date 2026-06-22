@@ -8,6 +8,7 @@ setup(
     name="embguard",
     version="0.1.0",
     description="EMBGuard safety guardrail system",
+    license="MIT",
     packages=find_packages(where=".", include=["src*"]),
     package_dir={"": "."},
     python_requires=">=3.10",
