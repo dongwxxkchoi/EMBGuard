@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Visualize trend lines for potential_risk across different test types (HR, MHR, HNR, NHR)
+Visualize trend lines for potential_risk across EMBGuardTest types:
+Causal Risky, Selective Risky, Decoupled Benign, and Absent Benign.
 Each model gets its own line showing how potential_risk changes across types
 """
 import argparse
@@ -16,6 +17,8 @@ import seaborn as sns
 project_root = Path(__file__).resolve().parent.parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
+
+from utils.test_types import TEST_TYPE_CODE_TO_LABEL, normalize_test_type_code
 
 
 def parse_value(value_str: str) -> Optional[float]:
@@ -71,6 +74,8 @@ def load_type_data(csv_file: Path) -> pd.DataFrame:
     if 'model_name' not in df.columns or 'test_type' not in df.columns or 'potential_risk' not in df.columns:
         raise ValueError(f"CSV file must have columns: model_name, test_type, potential_risk. Found: {df.columns.tolist()}")
     
+    df['test_type'] = df['test_type'].apply(lambda value: normalize_test_type_code(value, default=value))
+
     # Parse potential_risk values
     df['potential_risk_value'] = df['potential_risk'].apply(parse_value)
     
@@ -99,16 +104,11 @@ def plot_type_trends(
     # Load data
     df = load_type_data(csv_file)
     
-    # Define test type order
+    # Define test type order using dataset split codes.
     test_type_order = ['HR', 'MHR', 'HNR', 'NHR']
     
     # Map test types to display labels
-    test_type_labels = {
-        'HR': 'Causal Risky',
-        'MHR': 'Selective Risky',
-        'HNR': 'Decoupled Benign',
-        'NHR': 'Absent Benign'
-    }
+    test_type_labels = TEST_TYPE_CODE_TO_LABEL
     
     # ============================================
     # Model selection, colors, and markers (edit here)
@@ -194,22 +194,22 @@ def plot_type_trends(
     sns.set_style("whitegrid")
     
     # Add background colors for test types
-    # HR, MHR: red background (connected)
-    # HNR, NHR: green background (connected)
+    # Causal Risky and Selective Risky: red background (connected)
+    # Decoupled Benign and Absent Benign: green background (connected)
     test_type_positions = {test_type: idx for idx, test_type in enumerate(test_type_order)}
     
-    # HR and MHR: connected red background
+    # Causal Risky and Selective Risky: connected red background
     if 'HR' in test_type_positions and 'MHR' in test_type_positions:
         hr_pos = test_type_positions['HR']
         mhr_pos = test_type_positions['MHR']
-        # Connect HR and MHR with one continuous background
+        # Connect Causal Risky and Selective Risky with one continuous background.
         ax.axvspan(hr_pos - 0.4, mhr_pos + 0.4, alpha=0.2, color='red', zorder=0)
     
-    # HNR and NHR: connected green background
+    # Decoupled Benign and Absent Benign: connected green background
     if 'HNR' in test_type_positions and 'NHR' in test_type_positions:
         hnr_pos = test_type_positions['HNR']
         nhr_pos = test_type_positions['NHR']
-        # Connect HNR and NHR with one continuous background
+        # Connect Decoupled Benign and Absent Benign with one continuous background.
         ax.axvspan(hnr_pos - 0.4, nhr_pos + 0.4, alpha=0.2, color='green', zorder=0)
     
     # Define colors and markers for models

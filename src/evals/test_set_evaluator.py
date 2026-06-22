@@ -10,6 +10,11 @@ import pandas as pd
 
 from utils.config import get_config
 from utils.path import get_project_path
+from utils.test_types import (
+    extract_test_type_code_from_text,
+    normalize_test_type_code,
+    test_type_label,
+)
 from src.guardrail.guardrail import EMBGuard
 from src.inference_utils import run_parallel_inference
 from src.evals.utils import load_data, resolve_image, convert_messages_for_storage
@@ -58,12 +63,17 @@ class TestSetEvaluator:
             use_few_shot: Whether to include few-shot examples in prompts
             use_thinking: Whether to use thinking mode (step-by-step reasoning)
             num_workers: Number of worker processes (1 = sequential, >1 = parallel)
-            test_set_type: Test set type (HR, HNR, MHR, NHR). Auto-detected from filename if None.
-            split: Split name for Hugging Face dataset (e.g., "HR", "HNR", "MHR", "NHR")
+            test_set_type: Test set type code (HR=Causal Risky, HNR=Decoupled Benign,
+                MHR=Selective Risky, NHR=Absent Benign). Auto-detected from filename if None.
+            split: Split name for Hugging Face dataset. Accepts legacy codes
+                (e.g., "HR") and full split aliases (e.g., "causal_risky").
             
         Returns:
             List of evaluation results
         """
+        split = normalize_test_type_code(split, default=split)
+        test_set_type = normalize_test_type_code(test_set_type, default=test_set_type)
+
         # Load data (CSV or Hugging Face dataset)
         df, is_hf_dataset, csv_dir = load_data(data_source, split=split)
         
@@ -72,26 +82,23 @@ class TestSetEvaluator:
             if is_hf_dataset:
                 # For HF datasets, use split name if provided
                 if split:
-                    test_set_type = split.upper()
+                    test_set_type = normalize_test_type_code(split, default=split)
                 else:
                     # Try to get from "Type" column
                     if "Type" in df.columns and len(df) > 0:
-                        test_set_type = str(df.iloc[0].get("Type", "")).upper()
+                        test_set_type = normalize_test_type_code(df.iloc[0].get("Type", ""), default="UNKNOWN")
                     if not test_set_type:
                         test_set_type = "UNKNOWN"
             else:
                 # For CSV files, extract from filename
                 csv_path_obj = Path(data_source)
                 csv_name = csv_path_obj.stem.upper()  # e.g., "test_dataset_HR"
-                # Try to extract HR, HNR, MHR, or NHR from filename
-                for test_type in ["HR", "HNR", "MHR", "NHR"]:
-                    if test_type in csv_name:
-                        test_set_type = test_type
-                        break
+                # Try to extract an EMBGuardTest split code from filename.
+                test_set_type = extract_test_type_code_from_text(csv_name)
                 if test_set_type is None:
                     # Fallback: try to get from CSV row "Type" column if available
                     if "Type" in df.columns and len(df) > 0:
-                        test_set_type = str(df.iloc[0].get("Type", "")).upper()
+                        test_set_type = normalize_test_type_code(df.iloc[0].get("Type", ""), default="UNKNOWN")
                     if not test_set_type:
                         test_set_type = "UNKNOWN"
         
@@ -176,6 +183,7 @@ class TestSetEvaluator:
             "use_few_shot": use_few_shot,
             "use_thinking": use_thinking,
             "test_set_type": test_set_type,
+            "test_set_type_label": test_type_label(test_set_type),
         }
         
         # Run evaluation (sequential or parallel)
@@ -225,6 +233,7 @@ class TestSetEvaluator:
                     result = {
                         "idx": item["idx"],
                         "type": test_set_type,
+                        "type_label": test_type_label(test_set_type),
                         "csv_row": row_dict,
                         "action": action,
                         "image_path": str(image_path),
@@ -254,6 +263,7 @@ class TestSetEvaluator:
                     error_result = {
                         "idx": item["idx"],
                         "type": test_set_type,
+                        "type_label": test_type_label(test_set_type),
                         "csv_row": item["row"],
                         "error": str(e),
                     }
@@ -298,4 +308,3 @@ class TestSetEvaluator:
         with open(output_path, 'w', encoding='utf-8') as f:
             for result in results:
                 f.write(json.dumps(result, ensure_ascii=False, default=str) + '\n')
-

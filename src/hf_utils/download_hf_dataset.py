@@ -19,6 +19,7 @@ import shutil
 from pathlib import Path
 from typing import Optional
 from tqdm import tqdm
+from utils.test_types import hf_split_candidates, normalize_test_type_code
 
 try:
     from datasets import load_dataset
@@ -47,6 +48,7 @@ def download_dataset_with_images(
     """
     output_dir = Path(output_dir).expanduser().resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
+    split = normalize_test_type_code(split, default=split)
     
     print(f"Downloading dataset: {dataset_id}")
     print(f"Output directory: {output_dir}")
@@ -54,12 +56,21 @@ def download_dataset_with_images(
     # Load dataset
     if split:
         print(f"Loading split: {split}")
-        dataset = load_dataset(
-            dataset_id,
-            split=split,
-            token=token,
-            cache_dir=cache_dir,
-        )
+        last_error = None
+        for split_candidate in hf_split_candidates(split):
+            try:
+                dataset = load_dataset(
+                    dataset_id,
+                    split=split_candidate,
+                    token=token,
+                    cache_dir=cache_dir,
+                )
+                split = split_candidate
+                break
+            except Exception as e:
+                last_error = e
+        else:
+            raise last_error
         splits = {split: dataset}
     else:
         print("Loading all splits...")

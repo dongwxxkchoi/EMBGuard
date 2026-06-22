@@ -17,6 +17,17 @@ project_root = Path(__file__).resolve().parent.parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
+from utils.test_types import (
+    TEST_TYPE_CODE_TO_LABEL,
+    TEST_TYPE_CODES,
+    extract_test_type_code_from_text,
+    normalize_test_type_code,
+    test_type_label,
+)
+
+
+TEST_TYPE_LABELS = TEST_TYPE_CODE_TO_LABEL
+
 
 def load_evaluation_file(json_path: Path) -> Optional[Dict]:
     """Load evaluation JSON file"""
@@ -202,22 +213,22 @@ def aggregate_results(
                 else:
                     # For test_set (EMBGuardTest), extract test type from filename
                     test_type = None
-                    for t in ["HR", "HNR", "MHR", "NHR"]:
-                        if f"_{t}_" in filename or filename.endswith(f"_{t}"):
-                            test_type = t
-                            break
+                    test_type = extract_test_type_code_from_text(filename)
                     
                     if not test_type:
                         # Try to get from statistics by_type
                         by_type = stats.get("by_type", {})
                         if by_type:
-                            test_type = list(by_type.keys())[0]
+                            test_type = normalize_test_type_code(list(by_type.keys())[0], default=list(by_type.keys())[0])
                     
                     if not test_type:
                         continue
                     
                     # Store for specific test type (individual run statistics)
-                    by_type = stats.get("by_type", {})
+                    by_type = {
+                        normalize_test_type_code(type_key, default=type_key): type_stats
+                        for type_key, type_stats in stats.get("by_type", {}).items()
+                    }
                     if test_type in by_type:
                         type_stats = by_type[test_type]
                         type_total = type_stats.get("total", 0)  # Get data count for this test type
@@ -335,12 +346,12 @@ def aggregate_results(
             output_lines.append("")
         
         # Results by test type
-        test_types = ["HR", "HNR", "MHR", "NHR"]
+        test_types = list(TEST_TYPE_CODES)
         for test_type in test_types:
             if test_type not in model_data:
                 continue
             
-            output_lines.append(f"Test Type: {test_type}")
+            output_lines.append(f"Test Type: {test_type_label(test_type)}")
             output_lines.append("-" * 80)
             type_data = model_data[test_type]
             
@@ -477,12 +488,12 @@ def aggregate_results(
     
     print(f"Percentage CSV results saved to: {percentage_csv_file}")
     
-    # Generate type-based CSV (HR, HNR, MHR, NHR)
+    # Generate type-based CSV for EMBGuardTest type codes.
     type_csv_file = output_file.parent / "aggregated_results_by_type.csv"
     type_csv_lines = []
-    type_csv_lines.append("model_name,test_type,potential_risk,risk_type,hazard,conditional_risk_type,conditional_hazard")
+    type_csv_lines.append("model_name,test_type,test_type_label,potential_risk,risk_type,hazard,conditional_risk_type,conditional_hazard")
     
-    test_types = ["HR", "HNR", "MHR", "NHR"]
+    test_types = list(TEST_TYPE_CODES)
     for model_name in sorted_models:
         model_data = aggregated[model_name]
         for test_type in test_types:
@@ -511,7 +522,7 @@ def aggregate_results(
                 hazard = f"{stat['mean']:.4f} ± {stat['ci_margin']:.4f}"
             
             # Only set conditional accuracies if risk_type and hazard exist
-            # For test types like HNR and NHR where there are no risky cases,
+            # For benign test types where there are no risky cases,
             # conditional accuracies should also be empty
             if risk_type or hazard:
                 if "conditional_risk_type_accuracy" in type_data:
@@ -522,10 +533,11 @@ def aggregate_results(
                     stat = type_data["conditional_hazard_accuracy"]
                     conditional_hazard = f"{stat['mean']:.4f} ± {stat['ci_margin']:.4f}"
             
-            # For test types like HNR and NHR where there are no risky cases,
+            # For benign test types where there are no risky cases,
             # risk_type, hazard, conditional_risk_type, and conditional_hazard will be empty,
             # but we still show potential_risk
-            type_csv_lines.append(f"{model_name},{test_type},{potential_risk},{risk_type},{hazard},{conditional_risk_type},{conditional_hazard}")
+            type_label = test_type_label(test_type)
+            type_csv_lines.append(f"{model_name},{test_type},{type_label},{potential_risk},{risk_type},{hazard},{conditional_risk_type},{conditional_hazard}")
     
     type_csv_text = "\n".join(type_csv_lines)
     with open(type_csv_file, 'w', encoding='utf-8') as f:
@@ -692,15 +704,16 @@ def aggregate_results(
                 test_type_order = ["safe", "unsafe"]
                 type_label = "Dataset"
             else:
-                # For test_set, show HR, HNR, MHR, NHR
-                test_type_order = ["HR", "HNR", "MHR", "NHR"]
+                # For test_set, show EMBGuardTest type codes in a stable order.
+                test_type_order = list(TEST_TYPE_CODES)
                 type_label = "Test Type"
             
             for test_type in test_type_order:
                 if test_type not in test_types:
                     continue
                 
-                output_lines.append(f"{type_label}: {test_type}")
+                display_type = test_type_label(test_type)
+                output_lines.append(f"{type_label}: {display_type}")
                 output_lines.append("-" * 80)
                 type_data = test_types[test_type]
                 

@@ -7,10 +7,10 @@ common:
     # mhr: data/test_set/test_dataset_MHR.csv
     # nhr: data/test_set/test_dataset_NHR.csv
     # Hugging Face dataset (uncomment to use instead of local CSV)
-    hr: EMBGuard/EMBGuardTest
-    hnr: EMBGuard/EMBGuardTest
-    mhr: EMBGuard/EMBGuardTest
-    nhr: EMBGuard/EMBGuardTest
+    hr: EMBGuard/EMBGuardTest_v2
+    hnr: EMBGuard/EMBGuardTest_v2
+    mhr: EMBGuard/EMBGuardTest_v2
+    nhr: EMBGuard/EMBGuardTest_v2
   heldout_set:
     # Local CSV files
     safe: data/heldout_set/dataset_safe.csv

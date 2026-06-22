@@ -15,6 +15,7 @@ from src.guardrail.prompts.guardrail_prompt import (
     GUARDRAIL_USER_PROMPT,
     get_few_shot_messages
 )
+from utils.test_types import hf_split_candidates, normalize_test_type_code
 
 
 class EMBGuardTrainDataConstructionTask(BaseTask):
@@ -72,6 +73,7 @@ class EMBGuardTrainDataConstructionTask(BaseTask):
         
         # Check if dataset_path is a directory (saved dataset) or a string (dataset ID)
         dataset_path_str = str(dataset_path)
+        split = normalize_test_type_code(split, default=split)
         
         # Try to load from disk first (if it's a saved dataset)
         if Path(dataset_path).is_dir():
@@ -112,6 +114,7 @@ class EMBGuardTrainDataConstructionTask(BaseTask):
             # It's a dataset ID, load from Hub (will use cache automatically)
             if split is None:
                 split = 'train'  # Default to train split
+            split = normalize_test_type_code(split, default=split)
             
             print(f"Loading Hugging Face dataset from Hub: {dataset_path_str} (split: {split})")
             # Use cache directory from environment if available
@@ -124,10 +127,28 @@ class EMBGuardTrainDataConstructionTask(BaseTask):
             
             if cache_dir:
                 print(f"Using cache directory: {cache_dir}")
-                dataset = load_dataset(dataset_path_str, split=split, cache_dir=cache_dir)
+                last_error = None
+                for split_candidate in hf_split_candidates(split):
+                    try:
+                        dataset = load_dataset(dataset_path_str, split=split_candidate, cache_dir=cache_dir)
+                        split = split_candidate
+                        break
+                    except Exception as e:
+                        last_error = e
+                else:
+                    raise last_error
             else:
                 # Will use default cache location
-                dataset = load_dataset(dataset_path_str, split=split)
+                last_error = None
+                for split_candidate in hf_split_candidates(split):
+                    try:
+                        dataset = load_dataset(dataset_path_str, split=split_candidate)
+                        split = split_candidate
+                        break
+                    except Exception as e:
+                        last_error = e
+                else:
+                    raise last_error
         
         # Print dataset info for debugging
         if len(dataset) > 0:
@@ -290,21 +311,21 @@ class EMBGuardTrainDataConstructionTask(BaseTask):
         skipped_no_image = 0
         
         for row in tqdm(dataset, desc="Constructing training data", unit="examples"):
-                action = row.get('Action', '').strip()
-                image_path_str = row.get('URL', '').strip()
-                
+            action = row.get('Action', '').strip()
+            image_path_str = row.get('URL', '').strip()
+
             if not action:
                 skipped_no_action += 1
                 continue
-            
+
             if not image_path_str:
                 skipped_no_url += 1
-                    continue
-                
-                # Resolve image path
+                continue
+
+            # Resolve image path
             # Try CSV directory first (for relative paths like "images/xxx.jpg")
             # Then try project root, then absolute path
-                if not os.path.isabs(image_path_str):
+            if not os.path.isabs(image_path_str):
                 # Try relative to CSV directory first
                 if csv_dir:
                     image_path = csv_dir / image_path_str
@@ -314,84 +335,84 @@ class EMBGuardTrainDataConstructionTask(BaseTask):
                 else:
                     # No CSV directory, use project root
                     image_path = project_root / image_path_str
-                else:
-                    image_path = Path(image_path_str)
-                
-                # Skip if image doesn't exist
-                if not image_path.exists():
+            else:
+                image_path = Path(image_path_str)
+
+            # Skip if image doesn't exist
+            if not image_path.exists():
                 skipped_no_image += 1
                 if skipped_no_image <= 5:  # Print first few missing images for debugging
                     print(f"Warning: Image not found: {image_path} (from URL: {image_path_str})")
-                    continue
-                
-                # Convert to relative path for Hugging Face (relative to project root)
-                try:
-                    image_rel_path = os.path.relpath(image_path, project_root)
-                    if image_rel_path.startswith(".."):
-                        # If outside project root, keep absolute
-                        image_rel_path = str(image_path)
-                except ValueError:
+                continue
+
+            # Convert to relative path for Hugging Face (relative to project root)
+            try:
+                image_rel_path = os.path.relpath(image_path, project_root)
+                if image_rel_path.startswith(".."):
+                    # If outside project root, keep absolute
                     image_rel_path = str(image_path)
-                
-                # Construct messages in OpenAI format
-                messages = []
-                
-                # System message
-                messages.append({
-                    "role": "system",
-                    "content": GUARDRAIL_SYSTEM_PROMPT
-                })
-                
-                # Add few-shot examples if enabled
-                if use_few_shot:
-                    few_shot_messages = get_few_shot_messages()
-                    # Add <image> token to few-shot user messages if they should have images
-                    # Note: Few-shot examples don't have actual images, but we add the token for consistency
-                    for msg in few_shot_messages:
-                        if msg.get("role") == "user" and "<image>" not in msg.get("content", ""):
-                            msg["content"] = f"<image>{msg['content']}"
-                    messages.extend(few_shot_messages)
-                
-                # User message with action and image
-                # Add <image> token at the beginning of the prompt for multimodal models
-                # LlamaFactory requires: number of <image> tokens == length of images array
-                user_prompt = GUARDRAIL_USER_PROMPT.format(action=action)
-                user_message = {
-                    "role": "user",
-                    "content": f"<image>{user_prompt}",  # Add <image> token for LlamaFactory
-                    "images": [image_rel_path]  # Add image to user message
-                }
-                messages.append(user_message)
-                
-                # Assistant message (expected response)
+            except ValueError:
+                image_rel_path = str(image_path)
+
+            # Construct messages in OpenAI format
+            messages = []
+
+            # System message
+            messages.append({
+                "role": "system",
+                "content": GUARDRAIL_SYSTEM_PROMPT
+            })
+
+            # Add few-shot examples if enabled
+            if use_few_shot:
+                few_shot_messages = get_few_shot_messages()
+                # Add <image> token to few-shot user messages if they should have images
+                # Note: Few-shot examples don't have actual images, but we add the token for consistency
+                for msg in few_shot_messages:
+                    if msg.get("role") == "user" and "<image>" not in msg.get("content", ""):
+                        msg["content"] = f"<image>{msg['content']}"
+                messages.extend(few_shot_messages)
+
+            # User message with action and image
+            # Add <image> token at the beginning of the prompt for multimodal models
+            # LlamaFactory requires: number of <image> tokens == length of images array
+            user_prompt = GUARDRAIL_USER_PROMPT.format(action=action)
+            user_message = {
+                "role": "user",
+                "content": f"<image>{user_prompt}",  # Add <image> token for LlamaFactory
+                "images": [image_rel_path]  # Add image to user message
+            }
+            messages.append(user_message)
+
+            # Assistant message (expected response)
             # Construct expected JSON response from data
-                risk = row.get('Risk', '').strip()
-                risk_type = row.get('Risk Type', '').strip()
-                hazard = row.get('Related Hazard', '').strip()
-                
-                potential_risk = "unsafe" if risk == "O" else "safe"
-                if potential_risk == "safe":
-                    risk_type = "none"
-                    hazard = "none"
-                
-                assistant_response = json.dumps({
-                    "potential_risk": potential_risk,
-                    "risk_type": risk_type if risk_type else "none",
-                    "hazard": hazard if hazard else "none"
-                }, ensure_ascii=False)
-                
-                messages.append({
-                    "role": "assistant",
-                    "content": assistant_response
-                })
-                
-                # Create training example in OpenAI format
-                training_example = {
-                    "messages": messages,
-                    "images": [image_rel_path]  # Top-level images array for LlamaFactory
-                }
-                
-                training_data.append(training_example)
+            risk = row.get('Risk', '').strip()
+            risk_type = row.get('Risk Type', '').strip()
+            hazard = row.get('Related Hazard', '').strip()
+
+            potential_risk = "unsafe" if risk == "O" else "safe"
+            if potential_risk == "safe":
+                risk_type = "none"
+                hazard = "none"
+
+            assistant_response = json.dumps({
+                "potential_risk": potential_risk,
+                "risk_type": risk_type if risk_type else "none",
+                "hazard": hazard if hazard else "none"
+            }, ensure_ascii=False)
+
+            messages.append({
+                "role": "assistant",
+                "content": assistant_response
+            })
+
+            # Create training example in OpenAI format
+            training_example = {
+                "messages": messages,
+                "images": [image_rel_path]  # Top-level images array for LlamaFactory
+            }
+
+            training_data.append(training_example)
         
         # Save to output file
         os.makedirs(os.path.dirname(output_file), exist_ok=True)

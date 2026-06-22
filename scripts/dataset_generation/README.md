@@ -211,9 +211,9 @@ DEFAULT_OUTPUT_CSV="complete/dataset_all_with_images.csv"  # Output file
 **Automatic processing**:
 - Auto split `hazard_augmented` file (dual → individual scenarios)
 - Auto classify Subtype:
-  - `HR`: hazard_augmented, scene_augmented
-  - `NHR`: hazard_removed
-  - `HNR`: scene_augmented_safe
+  - Causal Risky (`HR`): hazard_augmented, scene_augmented
+  - Absent Benign (`NHR`): hazard_removed
+  - Decoupled Benign (`HNR`): scene_augmented_safe
 
 ---
 

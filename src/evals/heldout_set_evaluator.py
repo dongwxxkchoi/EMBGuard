@@ -12,6 +12,7 @@ from datasets import load_dataset
 
 from utils.config import get_config
 from utils.path import get_project_path
+from utils.test_types import hf_split_candidates, normalize_test_type_code, test_type_label
 from src.guardrail.guardrail import EMBGuard
 from src.inference_utils import run_parallel_inference
 from src.evals.utils import load_data, resolve_image, convert_messages_for_storage
@@ -69,7 +70,16 @@ class HeldoutSetEvaluator:
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore")
                     if split:
-                        dataset = load_dataset(data_source, split=split)
+                        last_error = None
+                        for split_candidate in hf_split_candidates(split):
+                            try:
+                                dataset = load_dataset(data_source, split=split_candidate)
+                                split = split_candidate
+                                break
+                            except Exception as e:
+                                last_error = e
+                        else:
+                            raise last_error
                     else:
                         # Load all splits and combine
                         dataset_dict = load_dataset(data_source)
@@ -373,8 +383,8 @@ class HeldoutSetEvaluator:
             if not has_image:
                 continue  # Skip rows without image
             
-            # Get Type from CSV row (HR, MHR, NHR, HNR)
-            row_type = str(row_dict.get("Type", "")).upper() if "Type" in row_dict else "UNKNOWN"
+            # Get EMBGuardTest type code from CSV row.
+            row_type = normalize_test_type_code(row_dict.get("Type", ""), default="UNKNOWN") if "Type" in row_dict else "UNKNOWN"
             
             dataset.append({
                 "idx": int(idx),
@@ -382,6 +392,7 @@ class HeldoutSetEvaluator:
                 "image_url": row_dict.get("URL", ""),
                 "csv_dir": str(csv_dir) if csv_dir else None,
                 "type": row_type,
+                "type_label": test_type_label(row_type),
                 "is_hf_dataset": is_hf_dataset,
             })
         
@@ -440,7 +451,8 @@ class HeldoutSetEvaluator:
                     # Save result
                     result = {
                         "idx": item["idx"],
-                        "type": item["type"],  # HR, MHR, NHR, HNR from CSV
+                        "type": item["type"],  # EMBGuardTest type code from CSV
+                        "type_label": test_type_label(item["type"]),
                         "dataset_type": dataset_type,  # safe or unsafe
                         "csv_row": row_dict,
                         "action": action,
@@ -471,6 +483,7 @@ class HeldoutSetEvaluator:
                     error_result = {
                         "idx": item["idx"],
                         "type": item["type"],
+                        "type_label": test_type_label(item["type"]),
                         "dataset_type": dataset_type,
                         "csv_row": item["row"],
                         "error": str(e),
@@ -809,4 +822,3 @@ if __name__ == "__main__":
             success_count = len([r for r in results if 'error' not in r])
             total_count = len(results)
             print(f"{dataset_name.upper()}: {success_count}/{total_count} successful")
-

@@ -29,6 +29,8 @@ project_root_str = str(project_root)
 if project_root_str not in sys.path:
     sys.path.insert(0, project_root_str)
 
+from utils.test_types import normalize_test_type_code, test_type_label
+
 # Delay imports until they're actually needed
 # This avoids import errors when the module is first loaded
 # The imports will happen in the functions that use them
@@ -202,6 +204,7 @@ def process_inference_item(config: Dict[str, Any], item: Dict[str, Any]) -> Tupl
     item_type = item.get("type")  # For heldout set
     test_set_type = config.get("test_set_type")  # For test set
     result_type = item_type if item_type else (test_set_type if test_set_type else "UNKNOWN")
+    result_type = normalize_test_type_code(result_type, default=result_type)
     
     # Get dataset_type from item (for heldout set) or config
     dataset_type = item.get("dataset_type") or config.get("dataset_type")
@@ -210,6 +213,7 @@ def process_inference_item(config: Dict[str, Any], item: Dict[str, Any]) -> Tupl
     result = {
         "idx": int(idx),
         "type": result_type,
+        "type_label": test_type_label(result_type),
         "csv_row": row,
         "action": action,
         "image_path": str(image_path),
@@ -401,4 +405,3 @@ def run_parallel_inference(
     process_results.sort(key=lambda x: x.get("idx", 0) if isinstance(x, dict) and "idx" in x else 0)
     
     return process_results, process_cost, process_usage
-

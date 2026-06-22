@@ -16,6 +16,7 @@ if project_root_str not in sys.path:
 
 from utils.config import get_config, load_config
 from utils.path import get_project_path
+from utils.test_types import TEST_TYPE_CODES, normalize_test_type_code, normalize_test_type_key, test_type_label
 from src.evals.test_set_evaluator import TestSetEvaluator
 from src.evals.heldout_set_evaluator import HeldoutSetEvaluator
 from src.evals.results_evaluator import ResultsEvaluator
@@ -96,14 +97,16 @@ def run_test_set_evaluation(args):
     use_thinking = args.use_thinking if hasattr(args, 'use_thinking') else default_use_thinking
     
     if args.data_source:
+        split = normalize_test_type_code(args.split, default=args.split)
+        test_set_type = normalize_test_type_code(args.test_set_type, default=args.test_set_type)
         # Single data source
         results = evaluator.run(
             data_source=args.data_source,
-            split=args.split,
+            split=split,
             use_few_shot=not args.no_few_shot,
             use_thinking=use_thinking,
             num_workers=args.num_workers,
-            test_set_type=args.test_set_type,
+            test_set_type=test_set_type,
         )
         print(f"\nGenerated {len(results)} results")
     else:
@@ -113,9 +116,9 @@ def run_test_set_evaluation(args):
         
         test_set_arg = args.test_set.lower().strip()
         if test_set_arg == "all":
-            test_sets = ["hr", "hnr", "mhr", "nhr"]
+            test_sets = [code.lower() for code in TEST_TYPE_CODES]
         else:
-            test_sets = [ts.strip().lower() for ts in test_set_arg.split(",")]
+            test_sets = [normalize_test_type_key(ts.strip(), strict=True) for ts in args.test_set.split(",")]
         
         all_results = evaluate_test_sets(
             provider=args.provider,
@@ -137,7 +140,7 @@ def run_test_set_evaluation(args):
         for test_set_name, results in all_results.items():
             success_count = len([r for r in results if 'error' not in r])
             total_count = len(results)
-            print(f"{test_set_name.upper()}: {success_count}/{total_count} successful")
+            print(f"{test_type_label(test_set_name)}: {success_count}/{total_count} successful")
 
 
 def run_heldout_set_evaluation(args):
@@ -277,7 +280,7 @@ Examples:
     test_parser.add_argument("--split", type=str, default=None,
                            help="Split name for Hugging Face dataset")
     test_parser.add_argument("--test-set-type", type=str, default=None,
-                           help="Test set type (HR, HNR, MHR, NHR)")
+                           help="Test set type code (HR=Causal Risky, HNR=Decoupled Benign, MHR=Selective Risky, NHR=Absent Benign)")
     test_parser.add_argument("--temperature", type=float, default=0.7)
     test_parser.add_argument("--max_tokens", type=int, default=2048)
     test_parser.add_argument("--output_dir", type=str, default=None)
@@ -345,4 +348,3 @@ Examples:
 
 if __name__ == "__main__":
     main()
-

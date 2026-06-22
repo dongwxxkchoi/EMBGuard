@@ -24,6 +24,7 @@ from utils.path import get_project_path
 from src.guardrail.guardrail import EMBGuard
 from src.evals.utils import load_data, resolve_image
 from src.evals.test_set_helpers import create_model_config
+from utils.test_types import normalize_test_type_code
 
 
 def main():
@@ -34,14 +35,13 @@ def main():
         "--data-source",
         type=str,
         default=None,
-        help="Hugging Face dataset (default: from config common.test_set.hr, e.g. EMBGuard/EMBGuardTest)",
+        help="Hugging Face dataset (default: from config common.test_set.hr, e.g. EMBGuard/EMBGuardTest_v2)",
     )
     parser.add_argument(
         "--split",
         type=str,
         default="HR",
-        choices=["HR", "HNR", "MHR", "NHR"],
-        help="Dataset split to take 1 sample from (default: HR)",
+        help="Dataset split code to take 1 sample from (HR=Causal Risky, HNR=Decoupled Benign, MHR=Selective Risky, NHR=Absent Benign; default: HR)",
     )
     parser.add_argument(
         "--model",
@@ -81,6 +81,7 @@ def main():
     args = parser.parse_args()
 
     use_few_shot = getattr(args, "use_few_shot", True) and not args.no_few_shot
+    split = normalize_test_type_code(args.split, default=args.split, strict=True)
 
     # Resolve data source
     if args.data_source:
@@ -88,14 +89,14 @@ def main():
     else:
         config = get_config()
         test_set = config.get("common", {}).get("test_set", {})
-        data_source = test_set.get(args.split.lower(), test_set.get("hr", "EMBGuard/EMBGuardTest"))
+        data_source = test_set.get(split.lower(), test_set.get("hr", "EMBGuard/EMBGuardTest_v2"))
     if not data_source:
         print("Error: No data source. Set --data-source or config common.test_set.hr.", file=sys.stderr)
         sys.exit(1)
 
     # Load 1 sample
-    print(f"Loading 1 sample from {data_source} (split={args.split})...")
-    df, is_hf_dataset, csv_dir = load_data(data_source, split=args.split)
+    print(f"Loading 1 sample from {data_source} (split={split})...")
+    df, is_hf_dataset, csv_dir = load_data(data_source, split=split)
     if df is None or len(df) == 0:
         print("Error: No data loaded.", file=sys.stderr)
         sys.exit(1)

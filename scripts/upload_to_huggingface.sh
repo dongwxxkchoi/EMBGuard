@@ -19,6 +19,9 @@ HF_ORG="EMBGuard"
 # Leave empty to use custom file (Option 2 or 3)
 DATASET=""
 
+# EMBGuardTest split names: "full" -> causal_risky/etc., "legacy" -> HR/HNR/MHR/NHR
+TEST_SPLIT_NAMES="full"
+
 # Option 2: Upload custom CSV file
 # Path to CSV file (relative to project root or absolute path)
 #CSV_PATH="xxx"
@@ -37,6 +40,9 @@ DATASET_NAME="EMBHazard"
 
 # Make dataset private (set to "true" to make private)
 PRIVATE="false"
+
+# Build the dataset and print split/schema information without uploading
+DRY_RUN="false"
 
 # Hugging Face token
 # Option 1: Set it here directly (not recommended for security)
@@ -96,6 +102,7 @@ CMD_ARGS=(
 if [ -n "$DATASET" ]; then
     # Use predefined dataset
     CMD_ARGS+=("--dataset" "$DATASET")
+    CMD_ARGS+=("--test-split-names" "$TEST_SPLIT_NAMES")
 elif [ -n "$JSON_PATH" ]; then
     # Use custom JSON
     if [ -z "$DATASET_NAME" ]; then
@@ -127,10 +134,13 @@ if [ "$PRIVATE" = "true" ]; then
     CMD_ARGS+=("--private")
 fi
 
+if [ "$DRY_RUN" = "true" ]; then
+    CMD_ARGS+=("--dry-run")
+fi
+
 if [ -n "$HF_TOKEN" ]; then
     CMD_ARGS+=("--token" "$HF_TOKEN")
 fi
 
 # Execute command
 python -m src.hf_utils.upload_to_huggingface "${CMD_ARGS[@]}"
-

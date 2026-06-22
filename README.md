@@ -14,8 +14,9 @@ All EMBGuard datasets and modelsare available on Hugging Face:
   - 15.1K samples for training
 
 - **EMBGuardTest**: Test set for evaluation
-  - Contains 4 test types: HR, HNR, MHR, NHR
-  - Available as splits in the dataset
+  - Contains 4 test types: Causal Risky, Decoupled Benign, Selective Risky, Absent Benign
+  - Available as Hugging Face splits: `causal_risky`, `decoupled_benign`, `selective_risky`, `absent_benign`
+  - Legacy type codes (`HR`, `HNR`, `MHR`, `NHR`) are still accepted by the codebase as aliases
 
 - **Heldout Set**: Additional evaluation dataset
   - Safe and unsafe scene splits
@@ -178,6 +179,15 @@ bash scripts/train/upload_merged_models.sh
 ```
 Uploads trained models to Hugging Face Hub.
 
+#### Migrate Hugging Face Datasets
+```bash
+python -m src.hf_utils.migrate_hf_datasets \
+  --org EMBGuard \
+  --datasets EMBGuardTest heldout_set EMBHazard \
+  --dry-run
+```
+Rebuilds existing Hub datasets from Hub sources without requiring local CSV/image files. For EMBGuardTest, the migrated splits are `causal_risky`, `decoupled_benign`, `selective_risky`, and `absent_benign`; rows retain the legacy `Type` code and add `Type Label`.
+
 ### 2. Evaluation Scripts (`scripts/evaluation/`)
 
 #### Run All Evaluations
@@ -185,7 +195,7 @@ Uploads trained models to Hugging Face Hub.
 bash scripts/evaluation/run_all_evaluations.sh
 ```
 Main evaluation script that:
-- Runs test set evaluation (HR, HNR, MHR, NHR)
+- Runs test set evaluation (Causal Risky, Decoupled Benign, Selective Risky, Absent Benign)
 - Runs heldout set evaluation (safe, unsafe)
 - Automatically evaluates results using LLM-as-a-judge
 - Supports multiple runs with `Run_n/` folder structure
@@ -250,9 +260,9 @@ Creates correlation plots showing the relationship between test set and heldout 
 ```bash
 bash scripts/visualization/plot_type_trend.sh
 ```
-Visualizes model performance across test types (HR, MHR, HNR, NHR):
+Visualizes model performance across test types (Causal Risky, Selective Risky, Decoupled Benign, Absent Benign):
 - Shows potential risk accuracy trends
-- Background colors: red for risky (HR/MHR), green for benign (HNR/NHR)
+- Background colors: red for risky (Causal Risky/Selective Risky), green for benign (Decoupled Benign/Absent Benign)
 - Customizable model selection and styling
 - Saves to `results/figures/`
 
@@ -290,10 +300,10 @@ common:
     nhr: data/test_set/test_dataset_NHR.csv
     
     # Option 2: Hugging Face dataset (recommended)
-    hr: EMBGuard/EMBGuardTest
-    hnr: EMBGuard/EMBGuardTest
-    mhr: EMBGuard/EMBGuardTest
-    nhr: EMBGuard/EMBGuardTest
+    hr: EMBGuard/EMBGuardTest_v2
+    hnr: EMBGuard/EMBGuardTest_v2
+    mhr: EMBGuard/EMBGuardTest_v2
+    nhr: EMBGuard/EMBGuardTest_v2
     
   heldout_set:
     safe: EMBGuard/heldout_set
@@ -302,16 +312,16 @@ common:
   use_thinking: false  # Enable thinking mode
 ```
 
-The system automatically detects Hugging Face datasets (paths containing "/" that don't exist as files).
+The system automatically detects Hugging Face datasets (paths containing "/" that don't exist as files). EMBGuardTest split aliases are normalized automatically, so `HR`, `hr`, `causal_risky`, `causal-risky`, and `Causal Risky` all resolve to the same test type.
 
 ## 📊 Evaluation Types
 
 ### Test Sets (EMBGuardTest)
 
-- **HR** (Hazard-Risk): Scenes with hazards that should be detected as risky
-- **HNR** (Hazard-No-Risk): Scenes with hazards but should be safe (decoupled)
-- **MHR** (Multi-Hazard-Risk): Multiple hazards, should be risky
-- **NHR** (No-Hazard-Risk): No hazards, should be safe
+- **Causal Risky** (`HR` split): Scenes with hazards that should be detected as risky
+- **Decoupled Benign** (`HNR` split): Scenes with hazards but should be safe (decoupled)
+- **Selective Risky** (`MHR` split): Multiple hazards, should be risky
+- **Absent Benign** (`NHR` split): No hazards, should be safe
 
 ### Heldout Sets
 
@@ -482,4 +492,3 @@ Not yet available
 ## 📄 License
 
 [Add your license information here]
-

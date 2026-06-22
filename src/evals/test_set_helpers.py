@@ -7,6 +7,7 @@ import re
 
 from utils.config import get_config, load_config
 from utils.path import get_project_path
+from utils.test_types import TEST_TYPE_CODES, normalize_test_type_code, normalize_test_type_key, test_type_label, test_type_slug
 from src.evals.test_set_evaluator import TestSetEvaluator
 
 
@@ -82,7 +83,8 @@ def evaluate_from_config(
         model_name: Model name
         data_source: CSV file path or Hugging Face dataset name (e.g., "org/dataset_name")
         config_path: Config file path (uses default if None)
-        test_set_type: Test set type (HR, HNR, MHR, NHR). Auto-detected if None.
+        test_set_type: Test set type code (HR=Causal Risky, HNR=Decoupled Benign,
+            MHR=Selective Risky, NHR=Absent Benign). Auto-detected if None.
         split: Split name for Hugging Face dataset (e.g., "HR", "HNR", "MHR", "NHR")
         **kwargs: Additional model settings (temperature, max_tokens, use_thinking, etc.)
         
@@ -128,21 +130,22 @@ def get_test_set_paths(config_path: Optional[str] = None) -> Dict[str, str]:
     
     project_path = get_project_path()
     test_set_paths = {}
-    for key in ["hr", "hnr", "mhr", "nhr"]:
-        if key in test_set_config:
-            path_or_dataset = test_set_config[key]
-            
-            # Check if it's a Hugging Face dataset name (contains "/" and doesn't exist as file)
-            if "/" in path_or_dataset and not Path(path_or_dataset).exists():
-                # Treat as Hugging Face dataset name
-                test_set_paths[key] = path_or_dataset
+    for raw_key, path_or_dataset in test_set_config.items():
+        key = normalize_test_type_key(raw_key)
+        if key not in [code.lower() for code in TEST_TYPE_CODES]:
+            continue
+
+        # Check if it's a Hugging Face dataset name (contains "/" and doesn't exist as file)
+        if "/" in path_or_dataset and not Path(path_or_dataset).exists():
+            # Treat as Hugging Face dataset name
+            test_set_paths[key] = path_or_dataset
+        else:
+            # Treat as local CSV file path
+            if not Path(path_or_dataset).is_absolute():
+                path = project_path / path_or_dataset
             else:
-                # Treat as local CSV file path
-                if not Path(path_or_dataset).is_absolute():
-                    path = project_path / path_or_dataset
-                else:
-                    path = Path(path_or_dataset)
-                test_set_paths[key] = str(path)
+                path = Path(path_or_dataset)
+            test_set_paths[key] = str(path)
     
     return test_set_paths
 
@@ -169,14 +172,14 @@ def evaluate_test_sets(
     """
     test_set_paths = get_test_set_paths(config_path)
     
-    valid_test_sets = ["hr", "hnr", "mhr", "nhr"]
-    invalid_sets = [ts for ts in test_sets if ts.lower() not in valid_test_sets]
+    valid_test_sets = [code.lower() for code in TEST_TYPE_CODES]
+    normalized_test_sets = [normalize_test_type_key(ts, strict=True) for ts in test_sets]
+    invalid_sets = [ts for ts in normalized_test_sets if ts not in valid_test_sets]
     if invalid_sets:
         raise ValueError(f"Invalid test set names: {invalid_sets}. Valid names: {valid_test_sets}")
     
     all_results = {}
-    for test_set in test_sets:
-        test_set_lower = test_set.lower()
+    for test_set_lower in normalized_test_sets:
         if test_set_lower not in test_set_paths:
             print(f"Warning: Test set '{test_set_lower}' not found in config, skipping...")
             continue
@@ -186,18 +189,18 @@ def evaluate_test_sets(
         # Determine if it's a Hugging Face dataset or local CSV
         is_hf_dataset = "/" in data_source and not Path(data_source).exists()
         if is_hf_dataset:
+            split = test_type_slug(test_set_lower)
             print(f"\n{'='*60}")
-            print(f"Evaluating: {test_set_lower.upper()} (Hugging Face: {data_source}, split: {test_set_lower.upper()})")
+            print(f"Evaluating: {test_type_label(test_set_lower)} (Hugging Face: {data_source}, split: {split})")
             print(f"{'='*60}")
-            split = test_set_lower.upper()  # Use test set name as split (HR, HNR, MHR, NHR)
         else:
             print(f"\n{'='*60}")
-            print(f"Evaluating: {test_set_lower.upper()} (Local CSV: {data_source})")
+            print(f"Evaluating: {test_type_label(test_set_lower)} (Local CSV: {data_source})")
             print(f"{'='*60}")
             split = None
         
         try:
-            test_set_type_upper = test_set_lower.upper()
+            test_set_type_upper = normalize_test_type_code(test_set_lower)
             results = evaluate_from_config(
                 provider=provider,
                 model_name=model_name,
@@ -213,4 +216,3 @@ def evaluate_test_sets(
             all_results[test_set_lower] = []
     
     return all_results
-

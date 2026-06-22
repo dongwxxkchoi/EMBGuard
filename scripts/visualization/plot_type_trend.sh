@@ -2,7 +2,8 @@
 
 # EMBGuard Type Trend Visualization Script
 # Usage: bash scripts/visualization/plot_type_trend.sh
-# Creates a line plot showing potential_risk trends across test types (HR, MHR, HNR, NHR)
+# Creates a line plot showing potential_risk trends across EMBGuardTest types:
+# Causal Risky, Selective Risky, Decoupled Benign, and Absent Benign.
 
 # Get project root (assuming script is in scripts/visualization/ folder)
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"

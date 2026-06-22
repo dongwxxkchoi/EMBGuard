@@ -29,6 +29,13 @@ def get_project_root():
     return script_dir.parent.parent
 
 
+project_root = get_project_root()
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
+from utils.test_types import TEST_TYPE_CODES, normalize_test_type_code, test_type_label, test_type_slug
+
+
 def load_csv_with_images(csv_path, base_dir, image_column="URL"):
     """
     Load CSV file and include images as Image objects.
@@ -107,7 +114,7 @@ def load_csv_with_images(csv_path, base_dir, image_column="URL"):
     return data
 
 
-def create_embguardtest_dataset(data_dir):
+def create_embguardtest_dataset(data_dir, test_split_names="full"):
     """Create EMBGuardTest dataset from CSV files."""
     data_dir = Path(data_dir)
     
@@ -119,6 +126,7 @@ def create_embguardtest_dataset(data_dir):
         "Category": Value("string"),
         "Subcategory": Value("string"),
         "Type": Value("string"),
+        "Type Label": Value("string"),
         "ID": Value("string"),
         "Situation": Value("string"),
         "Action": Value("string"),
@@ -132,13 +140,18 @@ def create_embguardtest_dataset(data_dir):
     })
     
     # Load each test dataset split
-    splits = ["HR", "HNR", "MHR", "NHR"]
+    splits = list(TEST_TYPE_CODES)
     for split in splits:
         csv_file = data_dir / f"test_dataset_{split}.csv"
         if csv_file.exists():
-            print(f"Loading {split} split...")
+            split_code = normalize_test_type_code(split, strict=True)
+            split_name = test_type_slug(split_code) if test_split_names == "full" else split_code
+            print(f"Loading {split_code} split as {split_name}...")
             data = load_csv_with_images(csv_file, data_dir)
-            datasets[split] = Dataset.from_list(data, features=features)
+            for item in data:
+                item["Type"] = split_code
+                item["Type Label"] = test_type_label(split_code)
+            datasets[split_name] = Dataset.from_list(data, features=features)
             print(f"  Loaded {len(data)} examples")
         else:
             print(f"Warning: {csv_file} not found, skipping {split} split")
@@ -529,7 +542,7 @@ def create_json_dataset(json_path, base_dir=None):
     return DatasetDict({"train": dataset})
 
 
-def upload_dataset(dataset_dict, org_name, dataset_name, private=False, token=None):
+def upload_dataset(dataset_dict, org_name, dataset_name, private=False, token=None, dry_run=False):
     """
     Upload dataset to Hugging Face.
     
@@ -545,6 +558,11 @@ def upload_dataset(dataset_dict, org_name, dataset_name, private=False, token=No
     print(f"\nUploading dataset to {repo_id}...")
     print(f"  Private: {private}")
     print(f"  Splits: {list(dataset_dict.keys())}")
+    if dry_run:
+        print("  Dry run: skipping push_to_hub")
+        for split_name, dataset in dataset_dict.items():
+            print(f"  - {split_name}: {len(dataset)} rows, columns={dataset.column_names}")
+        return
     
     try:
         dataset_dict.push_to_hub(
@@ -606,6 +624,17 @@ def main():
         help="Make the dataset private"
     )
     parser.add_argument(
+        "--test-split-names",
+        choices=["full", "legacy"],
+        default="full",
+        help="Split naming for EMBGuardTest uploads: full uses causal_risky/etc.; legacy uses HR/HNR/MHR/NHR (default: full)"
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Build datasets and print split/schema information without uploading"
+    )
+    parser.add_argument(
         "--token",
         type=str,
         help="Hugging Face token (or set HF_TOKEN environment variable)"
@@ -636,7 +665,10 @@ def main():
     
     # Login to Hugging Face
     token = args.token or os.getenv("HF_TOKEN")
-    if not token:
+    if args.dry_run:
+        token = token or None
+        print("Dry run enabled: Hugging Face login is not required.")
+    elif not token:
         # Try to use huggingface-cli login if available
         try:
             from huggingface_hub import whoami
@@ -655,7 +687,7 @@ def main():
             print("Error: Hugging Face token required. Set HF_TOKEN environment variable or use --token")
             sys.exit(1)
     
-    if token:
+    if token and not args.dry_run:
         login(token=token)
     # If token is None, we're using cached credentials from huggingface-cli login
     
@@ -685,7 +717,7 @@ def main():
                 base_dir = project_root
             
             dataset_dict = create_json_dataset(json_path, base_dir=base_dir)
-            upload_dataset(dataset_dict, args.org, args.dataset_name, private=args.private, token=token)
+            upload_dataset(dataset_dict, args.org, args.dataset_name, private=args.private, token=token, dry_run=args.dry_run)
             
         except Exception as e:
             print(f"Error processing JSON dataset: {e}")
@@ -723,7 +755,7 @@ def main():
                 base_dir = project_root
             
             dataset_dict = create_custom_dataset(csv_path, base_dir=base_dir)
-            upload_dataset(dataset_dict, args.org, args.dataset_name, private=args.private, token=token)
+            upload_dataset(dataset_dict, args.org, args.dataset_name, private=args.private, token=token, dry_run=args.dry_run)
             
         except Exception as e:
             print(f"Error processing custom dataset: {e}")
@@ -758,13 +790,13 @@ def main():
             
             try:
                 if dataset_name == "EMBGuardTest":
-                    dataset_dict = create_embguardtest_dataset(full_data_path)
+                    dataset_dict = create_embguardtest_dataset(full_data_path, test_split_names=args.test_split_names)
                 elif dataset_name == "heldout_set":
                     dataset_dict = create_heldout_dataset(full_data_path)
                 else:
                     continue
                 
-                upload_dataset(dataset_dict, args.org, dataset_name, private=args.private, token=token)
+                upload_dataset(dataset_dict, args.org, dataset_name, private=args.private, token=token, dry_run=args.dry_run)
                 
             except Exception as e:
                 print(f"Error processing {dataset_name}: {e}")
@@ -779,4 +811,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

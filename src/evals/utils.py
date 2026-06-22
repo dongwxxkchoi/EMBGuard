@@ -10,6 +10,7 @@ from datasets import load_dataset
 
 from utils.config import get_config
 from utils.path import get_project_path
+from utils.test_types import hf_split_candidates, normalize_test_type_code
 
 
 def load_data(data_source: str, split: Optional[str] = None) -> Tuple[pd.DataFrame, bool, Optional[Path]]:
@@ -18,7 +19,9 @@ def load_data(data_source: str, split: Optional[str] = None) -> Tuple[pd.DataFra
     
     Args:
         data_source: Path to CSV file or Hugging Face dataset name (e.g., "org/dataset_name")
-        split: Split name for Hugging Face dataset (e.g., "HR", "HNR", "MHR", "NHR", "safe", "unsafe")
+        split: Split name for Hugging Face dataset. EMBGuardTest accepts aliases
+            such as "HR", "causal_risky", or "Causal Risky"; heldout sets use
+            "safe" or "unsafe".
         
     Returns:
         Tuple of (DataFrame, is_hf_dataset, csv_dir)
@@ -26,6 +29,8 @@ def load_data(data_source: str, split: Optional[str] = None) -> Tuple[pd.DataFra
         - is_hf_dataset: True if loaded from Hugging Face, False if from CSV
         - csv_dir: Directory containing CSV (None for HF datasets)
     """
+    split = normalize_test_type_code(split, default=split)
+
     # Check if it's a Hugging Face dataset (contains "/" and doesn't exist as file)
     if "/" in data_source and not Path(data_source).exists():
         # Try to load from Hugging Face Hub
@@ -39,7 +44,16 @@ def load_data(data_source: str, split: Optional[str] = None) -> Tuple[pd.DataFra
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 if split:
-                    dataset = load_dataset(data_source, split=split)
+                    last_error = None
+                    for split_candidate in hf_split_candidates(split):
+                        try:
+                            dataset = load_dataset(data_source, split=split_candidate)
+                            split = split_candidate
+                            break
+                        except Exception as e:
+                            last_error = e
+                    else:
+                        raise last_error
                 else:
                     # Load all splits and combine
                     dataset_dict = load_dataset(data_source)
@@ -237,4 +251,3 @@ def convert_messages_for_storage(messages: List[Dict[str, Any]], image_path: str
         messages_copy.append(msg_copy)
     
     return messages_copy
-

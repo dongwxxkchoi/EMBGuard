@@ -21,6 +21,7 @@ if project_root_str not in sys.path:
     sys.path.insert(0, project_root_str)
 
 from utils.path import get_project_path
+from utils.test_types import TEST_TYPE_CODES, extract_test_type_code_from_text, normalize_test_type_code
 
 
 def load_evaluation_file(eval_file: Path) -> Dict:
@@ -219,7 +220,7 @@ def collect_test_set_scores(
         if not eval_files:
             continue
         
-        # Aggregate scores across all test sets (HR, HNR, MHR, NHR)
+        # Aggregate scores across all EMBGuardTest types.
         total_items = 0
         weighted_sum = 0.0
         
@@ -367,7 +368,7 @@ def collect_test_set_scores_by_type(
     condition: Optional[str] = None,
 ) -> Dict[str, Dict[str, float]]:
     """
-    Collect test set scores for all models, grouped by type (HR, HNR, MHR, NHR)
+    Collect test set scores for all models, grouped by EMBGuardTest type.
     
     Args:
         results_dir: Path to results directory (e.g., results/EMBGuardTest)
@@ -377,12 +378,7 @@ def collect_test_set_scores_by_type(
     Returns:
         Dictionary mapping type -> {model_name -> score}
     """
-    scores_by_type = {
-        "HR": {},
-        "HNR": {},
-        "MHR": {},
-        "NHR": {},
-    }
+    scores_by_type = {test_type: {} for test_type in TEST_TYPE_CODES}
     
     if not results_dir.exists():
         print(f"Warning: Results directory not found: {results_dir}")
@@ -408,24 +404,18 @@ def collect_test_set_scores_by_type(
         if not eval_files:
             continue
         
-        # Group files by type (HR, HNR, MHR, NHR)
-        files_by_type = {
-            "HR": [],
-            "HNR": [],
-            "MHR": [],
-            "NHR": [],
-        }
+        # Group files by EMBGuardTest type code.
+        files_by_type = {test_type: [] for test_type in TEST_TYPE_CODES}
         
         for eval_file in eval_files:
             # Extract type from filename (e.g., ..._HR_... or ..._test_dataset_HR_...)
             filename = eval_file.name
-            for test_type in ["HR", "HNR", "MHR", "NHR"]:
-                if f"_test_dataset_{test_type}_" in filename or f"_{test_type}_" in filename:
-                    files_by_type[test_type].append(eval_file)
-                    break
+            test_type = extract_test_type_code_from_text(filename)
+            if test_type in files_by_type:
+                files_by_type[test_type].append(eval_file)
         
         # Calculate score for each type
-        for test_type in ["HR", "HNR", "MHR", "NHR"]:
+        for test_type in TEST_TYPE_CODES:
             type_files = files_by_type[test_type]
             if not type_files:
                 continue
@@ -440,7 +430,10 @@ def collect_test_set_scores_by_type(
                     
                     # Try to get metric from by_type first, then overall
                     metric_value = None
-                    by_type = stats.get("by_type", {})
+                    by_type = {
+                        normalize_test_type_code(type_key, default=type_key): type_stats
+                        for type_key, type_stats in stats.get("by_type", {}).items()
+                    }
                     if test_type in by_type:
                         metric_value = by_type[test_type].get(metric)
                     
@@ -887,4 +880,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

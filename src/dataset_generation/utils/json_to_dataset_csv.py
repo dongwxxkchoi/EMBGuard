@@ -147,13 +147,13 @@ def _get_subtype_from_filename(filename: str) -> str:
     filename = filename.lower()
     
     if "hazard_augmented" in filename:
-        return "HR"  # Hazard Risk
+        return "HR"  # Causal Risky
     elif "scene_augmented_safe" in filename:
-        return "HNR"  # Hazard No Risk
+        return "HNR"  # Decoupled Benign
     elif "scene_augmented" in filename:
-        return "HR"  # Hazard Risk
+        return "HR"  # Causal Risky
     elif "hazard_removed" in filename:
-        return "NHR"  # No Hazard Risk
+        return "NHR"  # Absent Benign
     else:
         return "HR"  # Default
 
@@ -238,4 +238,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
