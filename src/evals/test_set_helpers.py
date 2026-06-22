@@ -83,9 +83,9 @@ def evaluate_from_config(
         model_name: Model name
         data_source: CSV file path or Hugging Face dataset name (e.g., "org/dataset_name")
         config_path: Config file path (uses default if None)
-        test_set_type: Test set type code (HR=Causal Risky, HNR=Decoupled Benign,
-            MHR=Selective Risky, NHR=Absent Benign). Auto-detected if None.
-        split: Split name for Hugging Face dataset (e.g., "HR", "HNR", "MHR", "NHR")
+        test_set_type: Test set label or alias (for example, "causal_risky"
+            or "Causal Risky"). Auto-detected if None.
+        split: Split name for Hugging Face dataset (for example, "causal_risky")
         **kwargs: Additional model settings (temperature, max_tokens, use_thinking, etc.)
         
     Returns:
@@ -118,7 +118,7 @@ def get_test_set_paths(config_path: Optional[str] = None) -> Dict[str, str]:
         config_path: Config file path (uses default if None)
         
     Returns:
-        Dictionary mapping test set names (hr, hnr, mhr, nhr) to file paths or HF dataset names
+        Dictionary mapping normalized test set names to file paths or HF dataset names
         - If path contains "/" and doesn't exist as file, treated as Hugging Face dataset name
         - Otherwise, treated as local CSV file path
     """
@@ -163,7 +163,8 @@ def evaluate_test_sets(
     Args:
         provider: LLM provider
         model_name: Model name
-        test_sets: List of test set names to evaluate (e.g., ["hr", "hnr"])
+        test_sets: List of test set names to evaluate (for example,
+            ["causal_risky", "decoupled_benign"])
         config_path: Config file path (uses default if None)
         **kwargs: Additional model settings
         

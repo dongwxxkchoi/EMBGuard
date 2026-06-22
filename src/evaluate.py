@@ -254,7 +254,7 @@ def main():
         epilog="""
 Examples:
   # Test set evaluation
-  python src/evaluate.py test-set --provider openai --model gpt-4o --test-set hr
+  python src/evaluate.py test-set --provider openai --model gpt-4o --test-set causal_risky
   
   # Heldout set evaluation
   python src/evaluate.py heldout-set --provider openai --model gpt-4o --dataset safe
@@ -273,14 +273,14 @@ Examples:
                            help="LLM provider")
     test_parser.add_argument("--model", type=str, required=True, help="Model name")
     test_parser.add_argument("--test-set", type=str, default="all",
-                           help="Test sets: 'all', 'hr', 'hnr', 'mhr', 'nhr', or comma-separated")
+                           help="Test sets: 'all', 'causal_risky', 'selective_risky', 'decoupled_benign', 'absent_benign', or comma-separated")
     test_parser.add_argument("--data-source", "--csv", type=str, default=None,
                            dest="data_source",
                            help="CSV file path or Hugging Face dataset name")
     test_parser.add_argument("--split", type=str, default=None,
                            help="Split name for Hugging Face dataset")
     test_parser.add_argument("--test-set-type", type=str, default=None,
-                           help="Test set type code (HR=Causal Risky, HNR=Decoupled Benign, MHR=Selective Risky, NHR=Absent Benign)")
+                           help="Test set type label or alias (for example: causal_risky, selective_risky, Causal Risky)")
     test_parser.add_argument("--temperature", type=float, default=0.7)
     test_parser.add_argument("--max_tokens", type=int, default=2048)
     test_parser.add_argument("--output_dir", type=str, default=None)

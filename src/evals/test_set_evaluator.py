@@ -63,8 +63,8 @@ class TestSetEvaluator:
             use_few_shot: Whether to include few-shot examples in prompts
             use_thinking: Whether to use thinking mode (step-by-step reasoning)
             num_workers: Number of worker processes (1 = sequential, >1 = parallel)
-            test_set_type: Test set type code (HR=Causal Risky, HNR=Decoupled Benign,
-                MHR=Selective Risky, NHR=Absent Benign). Auto-detected from filename if None.
+            test_set_type: Test set label or alias (for example, "causal_risky"
+                or "Causal Risky"). Auto-detected from filename if None.
             split: Split name for Hugging Face dataset. Accepts legacy codes
                 (e.g., "HR") and full split aliases (e.g., "causal_risky").
             
@@ -93,7 +93,7 @@ class TestSetEvaluator:
                 # For CSV files, extract from filename
                 csv_path_obj = Path(data_source)
                 csv_name = csv_path_obj.stem.upper()  # e.g., "test_dataset_HR"
-                # Try to extract an EMBGuardTest split code from filename.
+                # Try to extract an EMBGuardTest split name or legacy code from filename.
                 test_set_type = extract_test_type_code_from_text(csv_name)
                 if test_set_type is None:
                     # Fallback: try to get from CSV row "Type" column if available

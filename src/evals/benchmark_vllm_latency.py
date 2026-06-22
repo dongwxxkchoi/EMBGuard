@@ -24,7 +24,7 @@ from utils.path import get_project_path
 from src.guardrail.guardrail import EMBGuard
 from src.evals.utils import load_data, resolve_image
 from src.evals.test_set_helpers import create_model_config
-from utils.test_types import normalize_test_type_code
+from utils.test_types import normalize_test_type_code, normalize_test_type_key, test_type_slug
 
 
 def main():
@@ -35,13 +35,13 @@ def main():
         "--data-source",
         type=str,
         default=None,
-        help="Hugging Face dataset (default: from config common.test_set.hr, e.g. EMBGuard/EMBGuardTest_v2)",
+        help="Hugging Face dataset (default: from config common.test_set.causal_risky, e.g. EMBGuard/EMBGuardTest_v2)",
     )
     parser.add_argument(
         "--split",
         type=str,
-        default="HR",
-        help="Dataset split code to take 1 sample from (HR=Causal Risky, HNR=Decoupled Benign, MHR=Selective Risky, NHR=Absent Benign; default: HR)",
+        default="causal_risky",
+        help="Dataset split to take 1 sample from (for example: causal_risky, selective_risky, decoupled_benign, absent_benign; default: causal_risky)",
     )
     parser.add_argument(
         "--model",
@@ -81,6 +81,8 @@ def main():
     args = parser.parse_args()
 
     use_few_shot = getattr(args, "use_few_shot", True) and not args.no_few_shot
+    split_key = normalize_test_type_key(args.split, strict=True)
+    split_slug = test_type_slug(args.split)
     split = normalize_test_type_code(args.split, default=args.split, strict=True)
 
     # Resolve data source
@@ -89,9 +91,21 @@ def main():
     else:
         config = get_config()
         test_set = config.get("common", {}).get("test_set", {})
-        data_source = test_set.get(split.lower(), test_set.get("hr", "EMBGuard/EMBGuardTest_v2"))
+        data_source = test_set.get(
+            args.split,
+            test_set.get(
+                split_slug,
+                test_set.get(
+                    split_key,
+                    test_set.get(
+                        split.lower(),
+                        test_set.get("causal_risky", test_set.get("hr", "EMBGuard/EMBGuardTest_v2")),
+                    ),
+                ),
+            ),
+        )
     if not data_source:
-        print("Error: No data source. Set --data-source or config common.test_set.hr.", file=sys.stderr)
+        print("Error: No data source. Set --data-source or config common.test_set.causal_risky.", file=sys.stderr)
         sys.exit(1)
 
     # Load 1 sample

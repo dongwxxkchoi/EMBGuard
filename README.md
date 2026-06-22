@@ -219,7 +219,7 @@ PROVIDER_MODEL_PAIRS=(
 )
 
 # Test set configuration
-TEST_SET="all"  # Options: "all", "hr", "hnr", "mhr", "nhr"
+TEST_SET="all"  # Options: "all", "causal_risky", "selective_risky", "decoupled_benign", "absent_benign", or comma-separated
 TEST_SET_NUM_WORKERS="16"
 
 # Heldout set configuration
@@ -304,16 +304,16 @@ common:
   data_dir: data/test_set
   test_set:
     # Option 1: Local CSV files
-    hr: data/test_set/test_dataset_HR.csv
-    hnr: data/test_set/test_dataset_HNR.csv
-    mhr: data/test_set/test_dataset_MHR.csv
-    nhr: data/test_set/test_dataset_NHR.csv
+    causal_risky: data/test_set/test_dataset_HR.csv
+    selective_risky: data/test_set/test_dataset_MHR.csv
+    decoupled_benign: data/test_set/test_dataset_HNR.csv
+    absent_benign: data/test_set/test_dataset_NHR.csv
     
     # Option 2: Hugging Face dataset (recommended)
-    hr: EMBGuard/EMBGuardTest_v2
-    hnr: EMBGuard/EMBGuardTest_v2
-    mhr: EMBGuard/EMBGuardTest_v2
-    nhr: EMBGuard/EMBGuardTest_v2
+    causal_risky: EMBGuard/EMBGuardTest_v2
+    selective_risky: EMBGuard/EMBGuardTest_v2
+    decoupled_benign: EMBGuard/EMBGuardTest_v2
+    absent_benign: EMBGuard/EMBGuardTest_v2
     
   heldout_set:
     safe: EMBGuard/heldout_set
@@ -322,7 +322,7 @@ common:
   use_thinking: false  # Enable thinking mode
 ```
 
-The system automatically detects Hugging Face datasets (paths containing "/" that don't exist as files). EMBGuardTest split aliases are normalized automatically, so `HR`, `hr`, `causal_risky`, `causal-risky`, and `Causal Risky` all resolve to the same test type.
+The system automatically detects Hugging Face datasets (paths containing "/" that don't exist as files). Use the full split names for new workflows: `causal_risky`, `selective_risky`, `decoupled_benign`, and `absent_benign`. Legacy aliases such as `HR`, `hr`, `HNR`, `MHR`, and `NHR` remain supported for older configs and results.
 
 ## 📊 Evaluation Types
 

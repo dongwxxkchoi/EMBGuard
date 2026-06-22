@@ -190,8 +190,8 @@ class ResultsEvaluator:
         Evaluate potential_risk prediction
         
         Args:
-            result_type: Test set type code (HR=Causal Risky, MHR=Selective Risky,
-                NHR=Absent Benign, HNR=Decoupled Benign)
+            result_type: Test set label or alias (for example, "causal_risky"
+                or "Causal Risky")
             predicted_risk: Predicted potential_risk value ("safe" or "unsafe")
             
         Returns:
@@ -230,7 +230,7 @@ class ResultsEvaluator:
         Args:
             predicted_risk_type: Predicted risk_type from model
             ground_truth_category: Category from CSV (ground truth)
-            result_type: Test set type code for context.
+            result_type: Test set type label or alias for context.
             
         Returns:
             Dictionary with evaluation results

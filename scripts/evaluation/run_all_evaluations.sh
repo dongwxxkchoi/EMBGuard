@@ -74,7 +74,7 @@ PROVIDER_MODEL_PAIRS=(
 )
 
 # Test set configuration
-TEST_SET="all"  # Options: "all", "hr", "hnr", "mhr", "nhnr", "nhr", or comma-separated (e.g., "hr,hnr")
+TEST_SET="all"  # Options: "all", "causal_risky", "selective_risky", "decoupled_benign", "absent_benign", or comma-separated
 TEST_SET_NUM_WORKERS="32"
 
 # Heldout set configuration
@@ -595,4 +595,3 @@ else
     echo "Total: $total_jobs jobs (${total_pairs} pairs × ${NUM_RUNS} runs)"
     echo "============================================================"
 fi
-

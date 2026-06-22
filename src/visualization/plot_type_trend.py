@@ -104,7 +104,7 @@ def plot_type_trends(
     # Load data
     df = load_type_data(csv_file)
     
-    # Define test type order using dataset split codes.
+    # Define test type order using normalized dataset split names.
     test_type_order = ['HR', 'MHR', 'HNR', 'NHR']
     
     # Map test types to display labels

@@ -11,8 +11,8 @@ cd "$PROJECT_ROOT"
 # Configuration
 # ============================================
 VLLM_PORT="8000"                    # vLLM server port (match run_vllm*.sh)
-MODEL="EMBGuard/EMBGuard-2B"   # Model name
-SPLIT="HR"                         # EMBGuardTest split code (HR=Causal Risky, HNR=Decoupled Benign, MHR=Selective Risky, NHR=Absent Benign)
+MODEL="EMBGuard/EMBGuard-2B"       # Model name
+SPLIT="causal_risky"               # EMBGuardTest split name
 WARMUP=1                            # Warmup inferences before timing (0 = none)
 # ============================================
 
