@@ -1,10 +1,10 @@
 # EMBGuard
 
-EMBGuard is a hazard-aware guardrail framework for safe planning in embodied agents. It provides tools for constructing safety datasets, training guardrail models, evaluating vision-language models (VLMs), and analyzing whether models identify physical hazards and risk conditions in embodied scenes.
+EMBGuard is the first MLLM-based safety guardrail framework for embodied agents operating in real-world environments. It identifies action-conditioned physical hazards from (visual observation, action) pairs, provides risk explanations, and enables safe planning through decoupled risk reasoning.
 
 ## 📦 Datasets on Hugging Face
 
-All EMBGuard datasets and modelsare available on Hugging Face:
+All EMBGuard datasets and models are available on Hugging Face:
 
 🔗 **https://huggingface.co/EMBGuard**
 
@@ -16,7 +16,6 @@ All EMBGuard datasets and modelsare available on Hugging Face:
 - **EMBGuardTest**: Test set for evaluation
   - Contains 4 test types: Causal Risky, Decoupled Benign, Selective Risky, Absent Benign
   - Available as Hugging Face splits: `causal_risky`, `decoupled_benign`, `selective_risky`, `absent_benign`
-  - Legacy type codes (`HR`, `HNR`, `MHR`, `NHR`) are still accepted by the codebase as aliases
 
 - **Heldout Set**: Additional evaluation dataset
   - Safe and unsafe scene splits
@@ -37,7 +36,7 @@ EMBGuardTest is organized around four evaluation conditions:
 - **Decoupled Benign**: A hazard-like element is present but decoupled from the action, so the scene should be judged safe.
 - **Absent Benign**: The hazard is absent, so the scene should be judged safe.
 
-The Hugging Face split names are `causal_risky`, `selective_risky`, `decoupled_benign`, and `absent_benign`. Legacy aliases (`HR`, `MHR`, `HNR`, `NHR`) are still accepted for backward compatibility.
+The Hugging Face split names are `causal_risky`, `selective_risky`, `decoupled_benign`, and `absent_benign`.
 
 ## 🚀 Quick Start
 
