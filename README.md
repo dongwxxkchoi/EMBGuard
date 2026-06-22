@@ -18,7 +18,8 @@ All EMBGuard datasets and models are available on Hugging Face:
   - Available as Hugging Face splits: `causal_risky`, `decoupled_benign`, `selective_risky`, `absent_benign`
 
 - **Heldout Set**: Additional evaluation dataset
-  - Safe and unsafe scene splits
+  - Available as Hugging Face splits: `causal_risky`, `decoupled_benign`, `selective_risky`, `absent_benign`
+  - Legacy `safe` and `unsafe` splits are also retained for compatibility
 
 ### Available Models
 
@@ -196,7 +197,7 @@ python -m src.hf_utils.migrate_hf_datasets \
   --datasets EMBGuardTest heldout_set EMBHazard \
   --dry-run
 ```
-Rebuilds existing Hub datasets from Hub sources without requiring local CSV/image files. For EMBGuardTest, the migrated splits are `causal_risky`, `decoupled_benign`, `selective_risky`, and `absent_benign`; rows retain the legacy `Type` code and add `Type Label`.
+Rebuilds existing Hub datasets from Hub sources without requiring local CSV/image files. For EMBGuardTest and heldout_set, the migrated type splits are `causal_risky`, `decoupled_benign`, `selective_risky`, and `absent_benign`; rows retain the legacy `Type` code and add `Type Label`. For heldout_set, the legacy `safe` and `unsafe` splits are retained by default.
 
 ### 2. Evaluation Scripts (`scripts/evaluation/`)
 
@@ -335,8 +336,12 @@ The system automatically detects Hugging Face datasets (paths containing "/" tha
 
 ### Heldout Sets
 
-- **Safe**: Scenes with no safety hazards
-- **Unsafe**: Scenes with safety hazards
+- **Causal Risky** (`causal_risky` split): 111 heldout unsafe scenes
+- **Selective Risky** (`selective_risky` split): 250 heldout unsafe scenes
+- **Decoupled Benign** (`decoupled_benign` split): 112 heldout safe scenes
+- **Absent Benign** (`absent_benign` split): 92 heldout safe scenes
+
+The legacy `safe` and `unsafe` splits are still available for compatibility.
 
 ### Evaluation Metrics
 

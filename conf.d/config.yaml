@@ -13,11 +13,13 @@ common:
     absent_benign: EMBGuard/EMBGuardTest_v2
   heldout_set:
     # Local CSV files
-    safe: data/heldout_set/dataset_safe.csv
-    unsafe: data/heldout_set/dataset_unsafe.csv
+    # safe: data/heldout_set/dataset_safe.csv
+    # unsafe: data/heldout_set/dataset_unsafe.csv
     # Hugging Face dataset (uncomment to use instead of local CSV)
-    # safe: EMBGuard/heldout_set
-    # unsafe: EMBGuard/heldout_set
+    causal_risky: EMBGuard/heldout_set
+    selective_risky: EMBGuard/heldout_set
+    decoupled_benign: EMBGuard/heldout_set
+    absent_benign: EMBGuard/heldout_set
   # Evaluation settings
   use_thinking: false  # Enable thinking mode (step-by-step reasoning) for VLM evaluation
 

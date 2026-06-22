@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 from typing import Dict, Iterable, Optional
 
-from datasets import Dataset, DatasetDict, load_dataset
+from datasets import Dataset, DatasetDict, concatenate_datasets, load_dataset
 from huggingface_hub import login
 
 
@@ -119,10 +119,48 @@ def migrate_label_columns_only(source: DatasetDict) -> DatasetDict:
     return migrated
 
 
-def migrate_dataset(dataset_name: str, source: DatasetDict) -> DatasetDict:
+def _select_rows_by_type(dataset: Dataset, code: str) -> Dataset:
+    indices = [
+        index
+        for index, value in enumerate(dataset["Type"])
+        if normalize_test_type_code(value) == code
+    ]
+    return dataset.select(indices)
+
+
+def migrate_heldout_set(source: DatasetDict, split_naming: str) -> DatasetDict:
+    migrated = DatasetDict()
+
+    if split_naming in {"safety", "both"}:
+        for split_name in ("safe", "unsafe"):
+            if split_name in source:
+                print(f"  {split_name} -> {split_name}")
+                migrated[split_name] = _add_type_label_columns(source[split_name])
+
+    if split_naming in {"type", "both"}:
+        source_splits = [source[split_name] for split_name in ("safe", "unsafe") if split_name in source]
+        if not source_splits:
+            source_splits = [dataset for split_name, dataset in source.items() if split_name in {test_type_slug(code) for code in TEST_TYPE_CODES}]
+        if not source_splits:
+            raise ValueError("heldout_set source must contain safe/unsafe or type splits.")
+
+        combined = concatenate_datasets(source_splits)
+        combined = _add_type_label_columns(combined)
+        for code in TEST_TYPE_CODES:
+            target_split = test_type_slug(code)
+            selected = _select_rows_by_type(combined, code)
+            print(f"  Type={code} -> {target_split} ({test_type_label(code)}): {len(selected)} rows")
+            migrated[target_split] = selected
+
+    return migrated
+
+
+def migrate_dataset(dataset_name: str, source: DatasetDict, heldout_split_naming: str) -> DatasetDict:
     if dataset_name.startswith("EMBGuardTest"):
         return migrate_embguardtest(source)
-    if dataset_name in {"heldout_set", "EMBHazard"}:
+    if dataset_name == "heldout_set":
+        return migrate_heldout_set(source, heldout_split_naming)
+    if dataset_name == "EMBHazard":
         return migrate_label_columns_only(source)
     raise ValueError(f"Unsupported dataset: {dataset_name}")
 
@@ -172,6 +210,12 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true", help="Build transformed datasets without pushing.")
     parser.add_argument("--token", default=None, help="HF token. Defaults to HF_TOKEN.")
     parser.add_argument(
+        "--heldout-split-naming",
+        choices=["type", "safety", "both"],
+        default="both",
+        help="heldout_set split schema: type adds causal_risky/etc.; safety keeps safe/unsafe; both keeps both.",
+    )
+    parser.add_argument(
         "--commit-message",
         default="Migrate EMBGuard type split names and labels",
         help="Commit message for push_to_hub.",
@@ -192,7 +236,7 @@ def main() -> int:
         target_name = target_dataset_name(dataset_name, args.embguardtest_target_name)
         target_repo = f"{target_org}/{target_name}"
         source = _load_dataset_dict(source_repo, token=token, revision=args.source_revision)
-        migrated = migrate_dataset(dataset_name, source)
+        migrated = migrate_dataset(dataset_name, source, args.heldout_split_naming)
         print_dataset_summary(target_name, migrated)
 
         if args.dry_run:

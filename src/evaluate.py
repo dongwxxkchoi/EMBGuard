@@ -178,9 +178,12 @@ def run_heldout_set_evaluation(args):
         
         dataset_arg = args.dataset.lower().strip()
         if dataset_arg == "all":
-            datasets = ["safe", "unsafe"]
+            datasets = [code.lower() for code in TEST_TYPE_CODES]
         else:
-            datasets = [ds.strip().lower() for ds in dataset_arg.split(",")]
+            datasets = [
+                normalize_test_type_key(ds.strip(), strict=False) or ds.strip().lower()
+                for ds in dataset_arg.split(",")
+            ]
         
         all_results = evaluate_heldout_sets(
             provider=args.provider,
@@ -297,7 +300,7 @@ Examples:
                               help="LLM provider")
     heldout_parser.add_argument("--model", type=str, required=True, help="Model name")
     heldout_parser.add_argument("--dataset", type=str, default="all",
-                              help="Datasets: 'all', 'safe', 'unsafe', or comma-separated")
+                              help="Datasets: 'all', 'causal_risky', 'selective_risky', 'decoupled_benign', 'absent_benign', 'safe', 'unsafe', or comma-separated")
     heldout_parser.add_argument("--data-source", "--csv", type=str, default=None,
                               dest="data_source",
                               help="CSV file path or Hugging Face dataset name")
