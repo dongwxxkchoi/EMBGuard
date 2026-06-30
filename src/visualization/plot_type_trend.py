@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Visualize trend lines for potential_risk across EMBGuardTest types:
+Visualize trend lines for potential_risk across EMBGuardTest scenario types:
 Causal Risky, Selective Risky, Decoupled Benign, and Absent Benign.
-Each model gets its own line showing how potential_risk changes across types
+Each model gets its own line showing how potential_risk changes across scenario types.
 """
 import argparse
 import sys
@@ -56,12 +56,12 @@ def parse_value(value_str: str) -> Optional[float]:
     return None
 
 
-def load_type_data(csv_file: Path) -> pd.DataFrame:
+def load_scenario_type_data(csv_file: Path) -> pd.DataFrame:
     """
-    Load type-based CSV file and parse potential_risk values
+    Load scenario_type-based CSV file and parse potential_risk values
     
     Args:
-        csv_file: Path to CSV file (e.g., aggregated_results_by_type.csv)
+        csv_file: Path to CSV file (e.g., aggregated_results_by_scenario_type.csv)
         
     Returns:
         DataFrame with parsed data
@@ -70,11 +70,14 @@ def load_type_data(csv_file: Path) -> pd.DataFrame:
         raise FileNotFoundError(f"CSV file not found: {csv_file}")
     
     df = pd.read_csv(csv_file)
-    
-    if 'model_name' not in df.columns or 'test_type' not in df.columns or 'potential_risk' not in df.columns:
-        raise ValueError(f"CSV file must have columns: model_name, test_type, potential_risk. Found: {df.columns.tolist()}")
-    
-    df['test_type'] = df['test_type'].apply(lambda value: normalize_test_type_code(value, default=value))
+
+    if 'scenario_type' not in df.columns and 'test_type' in df.columns:
+        df['scenario_type'] = df['test_type']
+
+    if 'model_name' not in df.columns or 'scenario_type' not in df.columns or 'potential_risk' not in df.columns:
+        raise ValueError(f"CSV file must have columns: model_name, scenario_type, potential_risk. Found: {df.columns.tolist()}")
+
+    df['scenario_type_code'] = df['scenario_type'].apply(lambda value: normalize_test_type_code(value, default=value))
 
     # Parse potential_risk values
     df['potential_risk_value'] = df['potential_risk'].apply(parse_value)
@@ -93,22 +96,22 @@ def plot_type_trends(
     title: Optional[str] = None,
 ) -> None:
     """
-    Plot trend lines for potential_risk across test types
+    Plot trend lines for potential_risk across scenario types
     
     Args:
-        csv_file: Path to type-based CSV file
+        csv_file: Path to scenario_type-based CSV file
         output_file: Path to save the plot
         models: Optional list of model names to plot (if None, plots all models)
         title: Optional custom title
     """
     # Load data
-    df = load_type_data(csv_file)
+    df = load_scenario_type_data(csv_file)
     
-    # Define test type order using normalized dataset split names.
-    test_type_order = ['HR', 'MHR', 'HNR', 'NHR']
+    # Define scenario_type order using canonical codes for stable plotting.
+    scenario_type_order = ['HR', 'MHR', 'HNR', 'NHR']
     
-    # Map test types to display labels
-    test_type_labels = TEST_TYPE_CODE_TO_LABEL
+    # Map scenario types to display labels
+    scenario_type_labels = TEST_TYPE_CODE_TO_LABEL
     
     # ============================================
     # Model selection, colors, and markers (edit here)
@@ -193,22 +196,22 @@ def plot_type_trends(
     fig, ax = plt.subplots(figsize=(6, 4))
     sns.set_style("whitegrid")
     
-    # Add background colors for test types
+    # Add background colors for scenario types
     # Causal Risky and Selective Risky: red background (connected)
     # Decoupled Benign and Absent Benign: green background (connected)
-    test_type_positions = {test_type: idx for idx, test_type in enumerate(test_type_order)}
+    scenario_type_positions = {scenario_type: idx for idx, scenario_type in enumerate(scenario_type_order)}
     
     # Causal Risky and Selective Risky: connected red background
-    if 'HR' in test_type_positions and 'MHR' in test_type_positions:
-        hr_pos = test_type_positions['HR']
-        mhr_pos = test_type_positions['MHR']
+    if 'HR' in scenario_type_positions and 'MHR' in scenario_type_positions:
+        hr_pos = scenario_type_positions['HR']
+        mhr_pos = scenario_type_positions['MHR']
         # Connect Causal Risky and Selective Risky with one continuous background.
         ax.axvspan(hr_pos - 0.4, mhr_pos + 0.4, alpha=0.2, color='red', zorder=0)
     
     # Decoupled Benign and Absent Benign: connected green background
-    if 'HNR' in test_type_positions and 'NHR' in test_type_positions:
-        hnr_pos = test_type_positions['HNR']
-        nhr_pos = test_type_positions['NHR']
+    if 'HNR' in scenario_type_positions and 'NHR' in scenario_type_positions:
+        hnr_pos = scenario_type_positions['HNR']
+        nhr_pos = scenario_type_positions['NHR']
         # Connect Decoupled Benign and Absent Benign with one continuous background.
         ax.axvspan(hnr_pos - 0.4, nhr_pos + 0.4, alpha=0.2, color='green', zorder=0)
     
@@ -233,17 +236,17 @@ def plot_type_trends(
         
         # Extract values in the correct order
         values = []
-        for test_type in test_type_order:
-            type_data = model_data[model_data['test_type'] == test_type]
-            if len(type_data) > 0:
-                value = type_data['potential_risk_value'].iloc[0]
+        for scenario_type in scenario_type_order:
+            scenario_data = model_data[model_data['scenario_type_code'] == scenario_type]
+            if len(scenario_data) > 0:
+                value = scenario_data['potential_risk_value'].iloc[0]
                 values.append(value)
             else:
                 values.append(None)
         
         # Filter out None values for plotting
         valid_indices = [i for i, v in enumerate(values) if v is not None]
-        valid_types = [test_type_order[i] for i in valid_indices]
+        valid_scenario_types = [scenario_type_order[i] for i in valid_indices]
         valid_values = [values[i] for i in valid_indices]
         
         if len(valid_values) > 0:
@@ -254,8 +257,8 @@ def plot_type_trends(
                 if len(parts) > 1:
                     display_name = parts[1]
             
-            # Convert test type names to positions for plotting
-            valid_positions = [test_type_positions[t] for t in valid_types]
+            # Convert scenario_type names to positions for plotting
+            valid_positions = [scenario_type_positions[t] for t in valid_scenario_types]
             
             # Get color and marker for this model
             if model_configs and model_name in model_configs:
@@ -284,17 +287,17 @@ def plot_type_trends(
                     linestyle=line_style, color=model_color, label=display_name, alpha=0.8, zorder=2)
     
     # Labels and title
-    # ax.set_xlabel('Test Type', fontsize=16, fontweight='bold')
+    # ax.set_xlabel('Scenario Type', fontsize=16, fontweight='bold')
     ax.set_ylabel('Potential Risk', fontsize=14, fontweight='bold')
     
     # if title:
     #     ax.set_title(title, fontsize=18, fontweight='bold', pad=20)
     # else:
-    #     ax.set_title('Potential Risk Accuracy by Test Type', fontsize=18, fontweight='bold', pad=20)
+    #     ax.set_title('Potential Risk Accuracy by Scenario Type', fontsize=18, fontweight='bold', pad=20)
     
     # Set x-axis ticks and labels
-    ax.set_xticks(range(len(test_type_order)))
-    display_labels = [test_type_labels.get(tt, tt) for tt in test_type_order]
+    ax.set_xticks(range(len(scenario_type_order)))
+    display_labels = [scenario_type_labels.get(tt, tt) for tt in scenario_type_order]
     ax.set_xticklabels(display_labels, fontsize=10)
     ax.tick_params(axis='y', labelsize=8)
     
@@ -319,13 +322,13 @@ def plot_type_trends(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Visualize trend lines for potential_risk across test types"
+        description="Visualize trend lines for potential_risk across scenario types"
     )
     parser.add_argument(
         "--csv-file",
         type=str,
         required=True,
-        help="Path to type-based CSV file (e.g., results/EMBGuardTest/aggregated_results_by_type.csv)"
+        help="Path to scenario_type-based CSV file (e.g., results/EMBGuardTest/aggregated_results_by_scenario_type.csv)"
     )
     parser.add_argument(
         "--output-file",

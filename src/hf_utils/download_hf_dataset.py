@@ -122,17 +122,18 @@ def download_dataset_with_images(
                 try:
                     image = example['image']
                     
-                    # Get image filename from URL if available
+                    # Get image filename from a path-like column if available.
                     image_filename = None
-                    if 'URL' in row and row['URL']:
-                        # Extract filename from URL
-                        url_path = Path(row['URL'])
-                        image_filename = url_path.name
-                    elif 'url' in row and row['url']:
-                        url_path = Path(row['url'])
-                        image_filename = url_path.name
+                    image_path_value = (
+                        row.get('image_path', '')
+                        or row.get('source_path', '')
+                        or row.get('URL', '')
+                        or row.get('url', '')
+                    )
+                    if image_path_value:
+                        image_filename = Path(image_path_value).name
                     
-                    # If no filename from URL, generate one
+                    # If no filename is available from image_path/source_path, generate one.
                     if not image_filename:
                         # Try to infer from image format
                         if hasattr(image, 'format') and image.format:
@@ -171,21 +172,16 @@ def download_dataset_with_images(
                             print(f"Warning: Could not save image for example {idx}: {e}")
                             image_filename = None
                     
-                    # Update URL to relative path
+                    # Update image_path to the downloaded relative path.
                     if image_filename:
                         relative_image_path = f"images/{image_filename}"
-                        if 'URL' in row:
-                            row['URL'] = relative_image_path
-                        elif 'url' in row:
-                            row['url'] = relative_image_path
-                        else:
-                            row['URL'] = relative_image_path
+                        row['image_path'] = relative_image_path
                 
                 except Exception as e:
                     print(f"Warning: Failed to process image for example {idx}: {e}")
                     # Continue without image
-                    if 'URL' not in row and 'url' not in row:
-                        row['URL'] = ''
+                    if 'image_path' not in row:
+                        row['image_path'] = ''
             
             csv_data.append(row)
         
@@ -195,7 +191,7 @@ def download_dataset_with_images(
         df = pd.DataFrame(csv_data)
         df.to_csv(csv_path, index=False, encoding='utf-8')
         print(f"  Saved CSV: {csv_path}")
-        print(f"  Saved {len([r for r in csv_data if r.get('URL') or r.get('url')])} images")
+        print(f"  Saved {len([r for r in csv_data if r.get('image_path')])} images")
     
     print(f"\n✓ Dataset downloaded successfully to: {output_dir}")
 

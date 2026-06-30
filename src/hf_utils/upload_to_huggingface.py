@@ -34,6 +34,7 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 from utils.test_types import TEST_TYPE_CODES, normalize_test_type_code, test_type_label, test_type_slug
+from src.hf_utils.migrate_hf_datasets import _normalize_public_schema
 
 
 def load_csv_with_images(csv_path, base_dir, image_column="URL"):
@@ -49,6 +50,11 @@ def load_csv_with_images(csv_path, base_dir, image_column="URL"):
         List of dictionaries with data and images
     """
     df = pd.read_csv(csv_path)
+    if image_column not in df.columns:
+        for candidate in ("image_path", "source_path", "URL", "url", "path"):
+            if candidate in df.columns:
+                image_column = candidate
+                break
     base_dir = Path(base_dir)
     
     data = []
@@ -114,7 +120,7 @@ def load_csv_with_images(csv_path, base_dir, image_column="URL"):
     return data
 
 
-def create_embguardtest_dataset(data_dir, test_split_names="full"):
+def create_embguardtest_dataset(data_dir, test_split_names="full", schema="v3"):
     """Create EMBGuardTest dataset from CSV files."""
     data_dir = Path(data_dir)
     
@@ -151,7 +157,14 @@ def create_embguardtest_dataset(data_dir, test_split_names="full"):
             for item in data:
                 item["Type"] = split_code
                 item["Type Label"] = test_type_label(split_code)
-            datasets[split_name] = Dataset.from_list(data, features=features)
+            dataset = Dataset.from_list(data, features=features)
+            if schema == "v3":
+                dataset = _normalize_public_schema(
+                    dataset,
+                    split_name=split_name,
+                    force_scenario_code=split_code,
+                )
+            datasets[split_name] = dataset
             print(f"  Loaded {len(data)} examples")
         else:
             print(f"Warning: {csv_file} not found, skipping {split} split")
@@ -162,7 +175,7 @@ def create_embguardtest_dataset(data_dir, test_split_names="full"):
     return DatasetDict(datasets)
 
 
-def create_heldout_dataset(data_dir):
+def create_heldout_dataset(data_dir, schema="v3"):
     """Create heldout_set dataset from CSV files."""
     data_dir = Path(data_dir)
     
@@ -192,7 +205,10 @@ def create_heldout_dataset(data_dir):
         if csv_path.exists():
             print(f"Loading {split_name} split...")
             data = load_csv_with_images(csv_path, data_dir)
-            datasets[split_name] = Dataset.from_list(data, features=features)
+            dataset = Dataset.from_list(data, features=features)
+            if schema == "v3":
+                dataset = _normalize_public_schema(dataset, split_name=split_name)
+            datasets[split_name] = dataset
             print(f"  Loaded {len(data)} examples")
         else:
             print(f"Warning: {csv_path} not found, skipping {split_name} split")
@@ -360,7 +376,7 @@ def load_json_with_images(json_path, base_dir):
     return processed_data
 
 
-def create_custom_dataset(csv_path, base_dir=None):
+def create_custom_dataset(csv_path, base_dir=None, schema="v3"):
     """
     Create dataset from a single CSV file.
     
@@ -409,6 +425,8 @@ def create_custom_dataset(csv_path, base_dir=None):
     print(f"Loading dataset from {csv_path}...")
     data = load_csv_with_images(csv_path, base_dir)
     dataset = Dataset.from_list(data, features=features)
+    if schema == "v3":
+        dataset = _normalize_public_schema(dataset, split_name="train")
     print(f"  Loaded {len(data)} examples")
     
     return DatasetDict({"train": dataset})
@@ -630,6 +648,12 @@ def main():
         help="Split naming for EMBGuardTest uploads: full uses causal_risky/etc.; legacy uses HR/HNR/MHR/NHR (default: full)"
     )
     parser.add_argument(
+        "--schema",
+        choices=["v3", "legacy"],
+        default="v3",
+        help="Dataset schema for CSV uploads. v3 writes normalized public columns; legacy keeps original CSV columns (default: v3)"
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Build datasets and print split/schema information without uploading"
@@ -751,10 +775,10 @@ def main():
                 if not Path(base_dir).is_absolute():
                     base_dir = project_root / base_dir
             else:
-                # Default to project root since CSV URLs are relative to project root
+                # Default to project root since CSV image paths are relative to project root
                 base_dir = project_root
             
-            dataset_dict = create_custom_dataset(csv_path, base_dir=base_dir)
+            dataset_dict = create_custom_dataset(csv_path, base_dir=base_dir, schema=args.schema)
             upload_dataset(dataset_dict, args.org, args.dataset_name, private=args.private, token=token, dry_run=args.dry_run)
             
         except Exception as e:
@@ -790,9 +814,13 @@ def main():
             
             try:
                 if dataset_name == "EMBGuardTest":
-                    dataset_dict = create_embguardtest_dataset(full_data_path, test_split_names=args.test_split_names)
+                    dataset_dict = create_embguardtest_dataset(
+                        full_data_path,
+                        test_split_names=args.test_split_names,
+                        schema=args.schema,
+                    )
                 elif dataset_name == "heldout_set":
-                    dataset_dict = create_heldout_dataset(full_data_path)
+                    dataset_dict = create_heldout_dataset(full_data_path, schema=args.schema)
                 else:
                     continue
                 

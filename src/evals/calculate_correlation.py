@@ -428,16 +428,16 @@ def collect_test_set_scores_by_type(
                     data = load_evaluation_file(eval_file)
                     stats = data.get("statistics", {})
                     
-                    # Try to get metric from by_type first, then overall
+                    # Try to get metric from by_scenario_type first, then legacy by_type, then overall.
                     metric_value = None
-                    by_type = {
+                    by_scenario_type = {
                         normalize_test_type_code(type_key, default=type_key): type_stats
-                        for type_key, type_stats in stats.get("by_type", {}).items()
+                        for type_key, type_stats in (stats.get("by_scenario_type") or stats.get("by_type", {})).items()
                     }
-                    if test_type in by_type:
-                        metric_value = by_type[test_type].get(metric)
+                    if test_type in by_scenario_type:
+                        metric_value = by_scenario_type[test_type].get(metric)
                     
-                    # Fallback to overall metric if not found in by_type
+                    # Fallback to overall metric if not found in per-scenario statistics.
                     if metric_value is None:
                         metric_value = stats.get(metric)
                     
@@ -445,8 +445,8 @@ def collect_test_set_scores_by_type(
                         continue
                     
                     # Weight by total items for this type
-                    if test_type in by_type:
-                        total = by_type[test_type].get("total", 0)
+                    if test_type in by_scenario_type:
+                        total = by_scenario_type[test_type].get("total", 0)
                     else:
                         total = stats.get("total", 0)
                     

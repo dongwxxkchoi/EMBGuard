@@ -85,6 +85,16 @@ def test_type_slug(value: object) -> str:
     return TEST_TYPE_CODE_TO_SLUG.get(code, str(value).strip().lower().replace(" ", "_"))
 
 
+def test_type_safety_type(value: object) -> str:
+    """Return the dataset safety class for an EMBGuardTest scenario type."""
+    code = normalize_test_type_code(value)
+    if code in {"HR", "MHR"}:
+        return "unsafe"
+    if code in {"HNR", "NHR"}:
+        return "safe"
+    return ""
+
+
 def hf_split_candidates(value: object) -> List[str]:
     """Return preferred HF split names for a requested EMBGuardTest type."""
     code = normalize_test_type_code(value)

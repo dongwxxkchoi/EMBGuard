@@ -13,7 +13,8 @@ from utils.path import get_project_path
 from utils.test_types import (
     extract_test_type_code_from_text,
     normalize_test_type_code,
-    test_type_label,
+    test_type_safety_type,
+    test_type_slug,
 )
 from src.guardrail.guardrail import EMBGuard
 from src.inference_utils import run_parallel_inference
@@ -84,9 +85,11 @@ class TestSetEvaluator:
                 if split:
                     test_set_type = normalize_test_type_code(split, default=split)
                 else:
-                    # Try to get from "Type" column
-                    if "Type" in df.columns and len(df) > 0:
-                        test_set_type = normalize_test_type_code(df.iloc[0].get("Type", ""), default="UNKNOWN")
+                    # Try row-level normalized schema first, then legacy Type.
+                    for type_column in ("scenario_type", "Type", "Subtype"):
+                        if type_column in df.columns and len(df) > 0:
+                            test_set_type = normalize_test_type_code(df.iloc[0].get(type_column, ""), default="UNKNOWN")
+                            break
                     if not test_set_type:
                         test_set_type = "UNKNOWN"
             else:
@@ -96,9 +99,11 @@ class TestSetEvaluator:
                 # Try to extract an EMBGuardTest split name or legacy code from filename.
                 test_set_type = extract_test_type_code_from_text(csv_name)
                 if test_set_type is None:
-                    # Fallback: try to get from CSV row "Type" column if available
-                    if "Type" in df.columns and len(df) > 0:
-                        test_set_type = normalize_test_type_code(df.iloc[0].get("Type", ""), default="UNKNOWN")
+                    # Fallback: try to get from row-level normalized or legacy type columns.
+                    for type_column in ("scenario_type", "Type", "Subtype"):
+                        if type_column in df.columns and len(df) > 0:
+                            test_set_type = normalize_test_type_code(df.iloc[0].get(type_column, ""), default="UNKNOWN")
+                            break
                     if not test_set_type:
                         test_set_type = "UNKNOWN"
         
@@ -148,21 +153,33 @@ class TestSetEvaluator:
         for idx, row in df.iterrows():
             row_dict = row.to_dict() if hasattr(row, 'to_dict') else row
             
-            # Check for image (HF dataset has "image" column, CSV has "URL")
+            # Check for image (HF dataset has "image"; CSV/HF fallback has image_path).
             has_image = False
-            image_url = ""  # Initialize image_url for all cases
+            image_path_value = ""
             
             if is_hf_dataset:
-                # For HF datasets, check for "image" column (PIL Image) or "URL"
+                # For HF datasets, check for "image" column (PIL Image) or path fallback.
                 if "image" in row_dict and row_dict["image"] is not None:
                     has_image = True
-                elif "URL" in row_dict and row_dict["URL"]:
+                else:
+                    image_path_value = (
+                        row_dict.get("image_path", "")
+                        or row_dict.get("source_path", "")
+                        or row_dict.get("URL", "")
+                        or row_dict.get("url", "")
+                    )
+                if image_path_value:
                     has_image = True
-                    image_url = row_dict.get("URL", "")
             else:
-                # For CSV files, check for "URL" or "path"
-                image_url = row_dict.get("URL", "") or row_dict.get("path", "") or row_dict.get("image_path", "")
-                if image_url and not (pd.isna(image_url) or image_url == ""):
+                # For CSV files, check for normalized image_path or legacy URL/path.
+                image_path_value = (
+                    row_dict.get("image_path", "")
+                    or row_dict.get("source_path", "")
+                    or row_dict.get("URL", "")
+                    or row_dict.get("url", "")
+                    or row_dict.get("path", "")
+                )
+                if image_path_value and not (pd.isna(image_path_value) or image_path_value == ""):
                     has_image = True
             
             if not has_image:
@@ -171,7 +188,7 @@ class TestSetEvaluator:
             dataset.append({
                 "idx": int(idx),
                 "row": row_dict,
-                "image_url": image_url,
+                "image_path": image_path_value,
                 "csv_dir": str(csv_dir) if csv_dir else None,
                 "is_hf_dataset": is_hf_dataset,
             })
@@ -183,7 +200,6 @@ class TestSetEvaluator:
             "use_few_shot": use_few_shot,
             "use_thinking": use_thinking,
             "test_set_type": test_set_type,
-            "test_set_type_label": test_type_label(test_set_type),
         }
         
         # Run evaluation (sequential or parallel)
@@ -201,7 +217,7 @@ class TestSetEvaluator:
                 try:
                     # Extract action and image from row
                     row_dict = item["row"]
-                    action = row_dict.get("Action", "") or row_dict.get("action", "")
+                    action = row_dict.get("action", "") or row_dict.get("Action", "")
                     if not action or action == "":
                         raise ValueError("Action field is missing or empty")
                     
@@ -230,10 +246,13 @@ class TestSetEvaluator:
                     )
                     
                     # Save result
+                    safety_type = str(row_dict.get("type") or "").strip().lower()
+                    if safety_type not in {"safe", "unsafe"}:
+                        safety_type = test_type_safety_type(test_set_type) or "unknown"
                     result = {
                         "idx": item["idx"],
-                        "type": test_set_type,
-                        "type_label": test_type_label(test_set_type),
+                        "type": safety_type,
+                        "scenario_type": test_type_slug(test_set_type),
                         "csv_row": row_dict,
                         "action": action,
                         "image_path": str(image_path),
@@ -245,8 +264,9 @@ class TestSetEvaluator:
                     }
                     
                     # Include ID if present in CSV
-                    if "ID" in row_dict and row_dict.get("ID"):
-                        result["id"] = str(row_dict["ID"])
+                    row_id = row_dict.get("id") or row_dict.get("ID")
+                    if row_id:
+                        result["id"] = str(row_id)
                     
                     results.append(result)
                     total_cost += evaluation_result["cost"]
@@ -260,10 +280,11 @@ class TestSetEvaluator:
                     
                 except Exception as e:
                     print(f"Error processing row {item['idx']}: {e}")
+                    safety_type = test_type_safety_type(test_set_type) or "unknown"
                     error_result = {
                         "idx": item["idx"],
-                        "type": test_set_type,
-                        "type_label": test_type_label(test_set_type),
+                        "type": safety_type,
+                        "scenario_type": test_type_slug(test_set_type),
                         "csv_row": item["row"],
                         "error": str(e),
                     }

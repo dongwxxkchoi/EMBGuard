@@ -141,7 +141,7 @@ def load_data(data_source: str, split: Optional[str] = None) -> Tuple[pd.DataFra
 
 def resolve_image(item: Dict[str, Any], csv_dir: Optional[Path], is_hf_dataset: bool) -> Union[str, Path]:
     """
-    Resolve image from URL/path or Hugging Face dataset
+    Resolve image from image_path or Hugging Face dataset
     
     Args:
         item: Row/item dictionary containing image information
@@ -164,7 +164,7 @@ def resolve_image(item: Dict[str, Any], csv_dir: Optional[Path], is_hf_dataset: 
             temp_dir.mkdir(parents=True, exist_ok=True)
             
             # Generate filename from ID or index
-            image_id = item.get("ID", f"img_{item.get('idx', 'unknown')}")
+            image_id = item.get("id") or item.get("ID", f"img_{item.get('idx', 'unknown')}")
             temp_path = temp_dir / f"{image_id}.jpg"
             
             # Save PIL image to temp file
@@ -173,19 +173,29 @@ def resolve_image(item: Dict[str, Any], csv_dir: Optional[Path], is_hf_dataset: 
                 return temp_path
             else:
                 return str(pil_image)
-        elif "URL" in item and item["URL"]:
-            # Fallback to URL if image column not available
-            image_url = item["URL"]
-            if Path(image_url).exists():
-                return Path(image_url)
-            return image_url
         else:
+            image_path_value = (
+                item.get("image_path", "")
+                or item.get("source_path", "")
+                or item.get("URL", "")
+                or item.get("url", "")
+            )
+            if image_path_value:
+                if Path(image_path_value).exists():
+                    return Path(image_path_value)
+                return image_path_value
             raise ValueError("No image found in Hugging Face dataset item")
     else:
-        # For CSV files, resolve image path (URL or path)
-        image_url = item.get("URL", "") or item.get("path", "") or item.get("image_path", "")
-        if not image_url:
-            raise ValueError("No image URL/path found in CSV row")
+        # For CSV files, resolve image path from normalized image_path or legacy aliases.
+        image_path_value = (
+            item.get("image_path", "")
+            or item.get("source_path", "")
+            or item.get("URL", "")
+            or item.get("url", "")
+            or item.get("path", "")
+        )
+        if not image_path_value:
+            raise ValueError("No image path found in CSV row")
         
         # Get data_dir from config
         config = get_config()
@@ -200,15 +210,15 @@ def resolve_image(item: Dict[str, Any], csv_dir: Optional[Path], is_hf_dataset: 
             data_dir_path = Path(data_dir)
         
         # Resolve image path relative to data_dir
-        image_path = data_dir_path / image_url
+        image_path = data_dir_path / image_path_value
         if not image_path.exists():
             # Fallback: try resolving from CSV directory
             if csv_dir:
-                image_path = csv_dir / image_url
+                image_path = csv_dir / image_path_value
                 if not image_path.exists():
-                    raise FileNotFoundError(f"Image not found: {image_url} (tried: {data_dir_path / image_url}, {csv_dir / image_url})")
+                    raise FileNotFoundError(f"Image not found: {image_path_value} (tried: {data_dir_path / image_path_value}, {csv_dir / image_path_value})")
             else:
-                raise FileNotFoundError(f"Image not found: {image_url} (tried: {data_dir_path / image_url})")
+                raise FileNotFoundError(f"Image not found: {image_path_value} (tried: {data_dir_path / image_path_value})")
         return image_path
 
 

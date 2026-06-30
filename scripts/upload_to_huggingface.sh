@@ -22,6 +22,9 @@ DATASET=""
 # EMBGuardTest split names: "full" -> causal_risky/etc., "legacy" -> HR/HNR/MHR/NHR
 TEST_SPLIT_NAMES="full"
 
+# Dataset schema: "v3" -> normalized public columns, "legacy" -> original CSV columns
+SCHEMA="v3"
+
 # Option 2: Upload custom CSV file
 # Path to CSV file (relative to project root or absolute path)
 #CSV_PATH="xxx"
@@ -73,6 +76,7 @@ echo "EMBGuard Hugging Face Upload"
 echo "============================================================"
 echo "Organization: $HF_ORG"
 echo "Private: $PRIVATE"
+echo "Schema: $SCHEMA"
 if [ -n "$DATASET" ]; then
     echo "Dataset: $DATASET (predefined)"
 elif [ -n "$JSON_PATH" ]; then
@@ -129,6 +133,8 @@ else
     echo "Error: Must specify DATASET, CSV_PATH, or JSON_PATH"
     exit 1
 fi
+
+CMD_ARGS+=("--schema" "$SCHEMA")
 
 if [ "$PRIVATE" = "true" ]; then
     CMD_ARGS+=("--private")

@@ -14,7 +14,7 @@ All EMBGuard datasets and models are available on Hugging Face:
   - 15.1K samples for training
 
 - **EMBGuardTest**: Test set for evaluation
-  - Contains 4 test types: Causal Risky, Decoupled Benign, Selective Risky, Absent Benign
+  - Contains 4 scenario types: Causal Risky, Decoupled Benign, Selective Risky, Absent Benign
   - Available as Hugging Face splits: `causal_risky`, `decoupled_benign`, `selective_risky`, `absent_benign`
 
 - **Heldout Set**: Additional evaluation dataset
@@ -100,7 +100,7 @@ EMBGuard/
 │   │
 │   ├── visualization/                # Visualization scripts
 │   │   ├── plot_correlation.sh      # Plot correlation results
-│   │   └── plot_type_trend.sh       # Plot type-specific trends
+│   │   └── plot_type_trend.sh       # Plot scenario_type-specific trends
 │   │
 │   ├── dataset_generation/           # Dataset generation pipeline
 │   │   ├── 1_make_scenarios.sh      # Step 1: Scenario generation
@@ -194,10 +194,10 @@ Uploads trained models to Hugging Face Hub.
 ```bash
 python -m src.hf_utils.migrate_hf_datasets \
   --org EMBGuard \
-  --datasets EMBGuardTest heldout_set EMBHazard \
+  --datasets EMBGuardTest_v2 heldout_set EMBHazard \
   --dry-run
 ```
-Rebuilds existing Hub datasets from Hub sources without requiring local CSV/image files. For EMBGuardTest and heldout_set, the migrated type splits are `causal_risky`, `decoupled_benign`, `selective_risky`, and `absent_benign`; rows retain the legacy `Type` code and add `Type Label`. For heldout_set, the legacy `safe` and `unsafe` splits are retained by default.
+Rebuilds existing Hub datasets from Hub sources without requiring local CSV/image files. The default `v3` schema normalizes public columns to `id`, `image`, `image_path`, `risk`, `type`, `scenario_type`, `risk_type`, `risk_subtype`, `situation`, `hazard`, `action`, `room`, `multi_scenario`, and `pair_item_id`. Legacy display columns such as `Type Label`, `Subtype Label`, `Category`, `Subcategory`, `Risk Type`, `Mitigate Action`, and `URL` are replaced by the normalized names. For heldout_set, the legacy `safe` and `unsafe` splits are retained by default alongside `causal_risky`, `decoupled_benign`, `selective_risky`, and `absent_benign`. Use `--schema legacy-labels` only if you need the previous legacy column layout.
 
 ### 2. Evaluation Scripts (`scripts/evaluation/`)
 
@@ -244,7 +244,7 @@ Aggregates results across multiple runs:
 - Generates CSV files:
   - `aggregated_results_overall.csv`
   - `aggregated_results_overall_percentage.csv`
-  - `aggregated_results_by_type.csv`
+  - `aggregated_results_by_scenario_type.csv`
 - Includes conditional accuracy metrics
 
 #### Calculate Correlation
@@ -267,11 +267,11 @@ Creates correlation plots showing the relationship between test set and heldout 
 - Different colors for each metric
 - Saves to `results/figures/`
 
-#### Plot Type Trends
+#### Plot Scenario Type Trends
 ```bash
 bash scripts/visualization/plot_type_trend.sh
 ```
-Visualizes model performance across test types (Causal Risky, Selective Risky, Decoupled Benign, Absent Benign):
+Visualizes model performance across scenario types (Causal Risky, Selective Risky, Decoupled Benign, Absent Benign):
 - Shows potential risk accuracy trends
 - Background colors: red for risky (Causal Risky/Selective Risky), green for benign (Decoupled Benign/Absent Benign)
 - Customizable model selection and styling
@@ -447,14 +447,14 @@ results/
 │       └── {provider}_{model}/
 │           └── {model}_{type}_{condition}_evaluation.json
 │   └── aggregated_results_overall.csv
-│   └── aggregated_results_by_type.csv
+│   └── aggregated_results_by_scenario_type.csv
 └── heldout_set/
     └── Run_1/
         └── {provider}_{model}/
             └── {model}_{dataset}_{condition}_evaluation.json
 └── figures/
     ├── correlation_combined_*.png
-    └── type_trend_potential_risk.png
+    └── scenario_type_trend_potential_risk.png
 ```
 
 ## 🔍 Advanced Features

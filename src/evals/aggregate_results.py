@@ -23,6 +23,7 @@ from utils.test_types import (
     extract_test_type_code_from_text,
     normalize_test_type_code,
     test_type_label,
+    test_type_slug,
 )
 
 
@@ -216,21 +217,24 @@ def aggregate_results(
                     test_type = extract_test_type_code_from_text(filename)
                     
                     if not test_type:
-                        # Try to get from statistics by_type
-                        by_type = stats.get("by_type", {})
-                        if by_type:
-                            test_type = normalize_test_type_code(list(by_type.keys())[0], default=list(by_type.keys())[0])
+                        # Try to get from statistics by_scenario_type, then legacy by_type.
+                        by_scenario_type = stats.get("by_scenario_type") or stats.get("by_type", {})
+                        if by_scenario_type:
+                            test_type = normalize_test_type_code(
+                                list(by_scenario_type.keys())[0],
+                                default=list(by_scenario_type.keys())[0],
+                            )
                     
                     if not test_type:
                         continue
                     
                     # Store for specific test type (individual run statistics)
-                    by_type = {
+                    by_scenario_type = {
                         normalize_test_type_code(type_key, default=type_key): type_stats
-                        for type_key, type_stats in stats.get("by_type", {}).items()
+                        for type_key, type_stats in (stats.get("by_scenario_type") or stats.get("by_type", {})).items()
                     }
-                    if test_type in by_type:
-                        type_stats = by_type[test_type]
+                    if test_type in by_scenario_type:
+                        type_stats = by_scenario_type[test_type]
                         type_total = type_stats.get("total", 0)  # Get data count for this test type
                         type_metrics = {
                             "potential_risk_accuracy": type_stats.get("potential_risk_accuracy"),
@@ -255,8 +259,8 @@ def aggregate_results(
                             if value is not None:
                                 model_data[model_name][test_type][metric].append(value)
             
-            # Calculate overall from all test types for this run using weighted average
-            # Collect all test type values with their counts
+            # Calculate overall from all scenario types for this run using weighted average
+            # Collect all scenario_type values with their counts
             overall_metrics = defaultdict(lambda: {"weighted_sum": 0.0, "total_count": 0})
             for test_type, metrics in run_type_data.items():
                 for metric, data_info in metrics.items():
@@ -266,7 +270,7 @@ def aggregate_results(
                         overall_metrics[metric]["weighted_sum"] += value * count
                         overall_metrics[metric]["total_count"] += count
             
-            # Store overall for individual run statistics (weighted average of all test types)
+            # Store overall for individual run statistics (weighted average of all scenario types)
             for metric, metric_data in overall_metrics.items():
                 total_count = metric_data["total_count"]
                 if total_count > 0:
@@ -345,13 +349,13 @@ def aggregate_results(
                     )
             output_lines.append("")
         
-        # Results by test type
+        # Results by scenario_type
         test_types = list(TEST_TYPE_CODES)
         for test_type in test_types:
             if test_type not in model_data:
                 continue
             
-            output_lines.append(f"Test Type: {test_type_label(test_type)}")
+            output_lines.append(f"Scenario Type: {test_type_label(test_type)}")
             output_lines.append("-" * 80)
             type_data = model_data[test_type]
             
@@ -488,10 +492,10 @@ def aggregate_results(
     
     print(f"Percentage CSV results saved to: {percentage_csv_file}")
     
-    # Generate type-based CSV for EMBGuardTest type codes.
-    type_csv_file = output_file.parent / "aggregated_results_by_type.csv"
+    # Generate scenario_type-based CSV for EMBGuardTest conditions.
+    type_csv_file = output_file.parent / "aggregated_results_by_scenario_type.csv"
     type_csv_lines = []
-    type_csv_lines.append("model_name,test_type,test_type_label,potential_risk,risk_type,hazard,conditional_risk_type,conditional_hazard")
+    type_csv_lines.append("model_name,scenario_type,potential_risk,risk_type,hazard,conditional_risk_type,conditional_hazard")
     
     test_types = list(TEST_TYPE_CODES)
     for model_name in sorted_models:
@@ -522,7 +526,7 @@ def aggregate_results(
                 hazard = f"{stat['mean']:.4f} ± {stat['ci_margin']:.4f}"
             
             # Only set conditional accuracies if risk_type and hazard exist
-            # For benign test types where there are no risky cases,
+            # For benign scenario types where there are no risky cases,
             # conditional accuracies should also be empty
             if risk_type or hazard:
                 if "conditional_risk_type_accuracy" in type_data:
@@ -533,11 +537,11 @@ def aggregate_results(
                     stat = type_data["conditional_hazard_accuracy"]
                     conditional_hazard = f"{stat['mean']:.4f} ± {stat['ci_margin']:.4f}"
             
-            # For benign test types where there are no risky cases,
+            # For benign scenario types where there are no risky cases,
             # risk_type, hazard, conditional_risk_type, and conditional_hazard will be empty,
             # but we still show potential_risk
-            type_label = test_type_label(test_type)
-            type_csv_lines.append(f"{model_name},{test_type},{type_label},{potential_risk},{risk_type},{hazard},{conditional_risk_type},{conditional_hazard}")
+            scenario_type = test_type_slug(test_type)
+            type_csv_lines.append(f"{model_name},{scenario_type},{potential_risk},{risk_type},{hazard},{conditional_risk_type},{conditional_hazard}")
     
     type_csv_text = "\n".join(type_csv_lines)
     with open(type_csv_file, 'w', encoding='utf-8') as f:
@@ -704,9 +708,9 @@ def aggregate_results(
                 test_type_order = ["safe", "unsafe"]
                 type_label = "Dataset"
             else:
-                # For test_set, show EMBGuardTest type codes in a stable order.
+                # For test_set, show EMBGuard scenario types in a stable order.
                 test_type_order = list(TEST_TYPE_CODES)
-                type_label = "Test Type"
+                type_label = "Scenario Type"
             
             for test_type in test_type_order:
                 if test_type not in test_types:

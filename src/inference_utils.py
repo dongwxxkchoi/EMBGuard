@@ -29,7 +29,7 @@ project_root_str = str(project_root)
 if project_root_str not in sys.path:
     sys.path.insert(0, project_root_str)
 
-from utils.test_types import normalize_test_type_code, test_type_label
+from utils.test_types import normalize_test_type_code, test_type_safety_type, test_type_slug
 
 # Delay imports until they're actually needed
 # This avoids import errors when the module is first loaded
@@ -102,7 +102,7 @@ def process_inference_item(config: Dict[str, Any], item: Dict[str, Any]) -> Tupl
         item: Dictionary containing:
             - idx: Row index
             - row: DataFrame row as dictionary
-            - image_url: Image URL from CSV
+            - image_path: Image path from the normalized dataset schema
             - csv_dir: CSV directory path
             
     Returns:
@@ -119,14 +119,22 @@ def process_inference_item(config: Dict[str, Any], item: Dict[str, Any]) -> Tupl
     # Extract data from item
     idx = item["idx"]
     row = item["row"]
-    image_url = item.get("image_url", "") or row.get("URL", "") or row.get("path", "") or row.get("image_path", "")
+    image_path_value = (
+        item.get("image_path", "")
+        or item.get("image_url", "")
+        or row.get("image_path", "")
+        or row.get("source_path", "")
+        or row.get("URL", "")
+        or row.get("url", "")
+        or row.get("path", "")
+    )
     csv_dir_str = item.get("csv_dir")
     csv_dir = Path(csv_dir_str) if csv_dir_str else None
     is_hf_dataset = item.get("is_hf_dataset", False)
     use_few_shot = config.get("use_few_shot", True)
     
     # Extract action
-    action = row.get("Action", "") or row.get("action", "")
+    action = row.get("action", "") or row.get("Action", "")
     if not action or action == "":
         raise ValueError("Action field is missing or empty")
     
@@ -155,7 +163,7 @@ def process_inference_item(config: Dict[str, Any], item: Dict[str, Any]) -> Tupl
             temp_dir.mkdir(parents=True, exist_ok=True)
             
             # Generate filename from ID or index
-            image_id = row.get("ID", f"img_{idx}")
+            image_id = row.get("id") or row.get("ID", f"img_{idx}")
             temp_path = temp_dir / f"{image_id}.jpg"
             
             # Save PIL image to temp file
@@ -164,16 +172,16 @@ def process_inference_item(config: Dict[str, Any], item: Dict[str, Any]) -> Tupl
                 image_path = temp_path
             else:
                 image_path = Path(str(pil_image))
-        elif image_url:
-            # Fallback to URL if image column not available
-            image_path = Path(image_url) if Path(image_url).exists() else Path(image_url)
+        elif image_path_value:
+            # Fallback to a path-like field if the image column is not available.
+            image_path = Path(image_path_value)
         else:
             raise ValueError("No image found in Hugging Face dataset item")
     else:
         # For CSV files, resolve image path
-        if not image_url:
-            raise ValueError("No image URL/path found in CSV row")
-        image_path = _resolve_image_path(image_url, csv_dir)
+        if not image_path_value:
+            raise ValueError("No image path found in CSV row")
+        image_path = _resolve_image_path(image_path_value, csv_dir)
     
     # Get use_thinking from config
     use_thinking = config.get("use_thinking", False)
@@ -198,22 +206,37 @@ def process_inference_item(config: Dict[str, Any], item: Dict[str, Any]) -> Tupl
         use_thinking=use_thinking
     )
     
-    # Get type from item (for heldout set) or config (for test set)
-    # Heldout set: type is in item (from CSV Type column)
-    # Test set: type is in config (test_set_type)
-    item_type = item.get("type")  # For heldout set
-    test_set_type = config.get("test_set_type")  # For test set
-    result_type = item_type if item_type else (test_set_type if test_set_type else "UNKNOWN")
-    result_type = normalize_test_type_code(result_type, default=result_type)
-    
-    # Get dataset_type from item (for heldout set) or config
-    dataset_type = item.get("dataset_type") or config.get("dataset_type")
+    # scenario_type is the EMBGuard condition; type is the dataset safety class.
+    scenario_code = None
+    for scenario_candidate in (
+        item.get("scenario_type"),
+        config.get("test_set_type"),
+        row.get("scenario_type"),
+        row.get("Type"),
+        row.get("Subtype"),
+        item.get("type"),  # legacy result payloads used type for the condition.
+    ):
+        scenario_code = normalize_test_type_code(scenario_candidate, default=None)
+        if scenario_code:
+            break
+    if not scenario_code:
+        scenario_code = "UNKNOWN"
+
+    safety_type = str(
+        row.get("type")
+        or item.get("type")
+        or item.get("dataset_type")
+        or config.get("dataset_type")
+        or ""
+    ).strip().lower()
+    if safety_type not in {"safe", "unsafe"}:
+        safety_type = test_type_safety_type(scenario_code) or "unknown"
     
     # Build result
     result = {
         "idx": int(idx),
-        "type": result_type,
-        "type_label": test_type_label(result_type),
+        "type": safety_type,
+        "scenario_type": test_type_slug(scenario_code),
         "csv_row": row,
         "action": action,
         "image_path": str(image_path),
@@ -224,13 +247,15 @@ def process_inference_item(config: Dict[str, Any], item: Dict[str, Any]) -> Tupl
         "cost": inference_result["cost"],
     }
     
-    # Add dataset_type if present (for heldout set)
-    if dataset_type:
+    # Keep dataset_type only when a legacy caller provided it explicitly.
+    dataset_type = item.get("dataset_type") or config.get("dataset_type")
+    if dataset_type and dataset_type != safety_type:
         result["dataset_type"] = dataset_type
     
     # Include ID if present
-    if "ID" in row and row.get("ID"):
-        result["id"] = str(row["ID"])
+    row_id = row.get("id") or row.get("ID")
+    if row_id:
+        result["id"] = str(row_id)
     
     return result, inference_result["cost"], inference_result["usage"]
 
@@ -276,12 +301,12 @@ def _convert_messages_for_storage(messages: List[Dict[str, Any]], image_path: st
     return messages_copy
 
 
-def _resolve_image_path(image_url: str, csv_dir: Path) -> Path:
+def _resolve_image_path(image_path_value: str, csv_dir: Path) -> Path:
     """
-    Resolve image path from URL/path using data_dir from config
+    Resolve image path using data_dir from config
     
     Args:
-        image_url: Image URL/path from CSV (relative path)
+        image_path_value: Image path from CSV or dataset metadata
         csv_dir: Directory containing the CSV file
         
     Returns:
@@ -303,12 +328,12 @@ def _resolve_image_path(image_url: str, csv_dir: Path) -> Path:
         data_dir_path = Path(data_dir)
     
     # Resolve image path relative to data_dir
-    image_path = data_dir_path / image_url
+    image_path = data_dir_path / image_path_value
     if not image_path.exists():
         # Fallback: try resolving from CSV directory
-        image_path = csv_dir / image_url
+        image_path = csv_dir / image_path_value
         if not image_path.exists():
-            raise FileNotFoundError(f"Image not found: {image_url} (tried: {data_dir_path / image_url}, {csv_dir / image_url})")
+            raise FileNotFoundError(f"Image not found: {image_path_value} (tried: {data_dir_path / image_path_value}, {csv_dir / image_path_value})")
     return image_path
 
 

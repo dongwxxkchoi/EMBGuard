@@ -12,7 +12,7 @@ from datasets import load_dataset
 
 from utils.config import get_config
 from utils.path import get_project_path
-from utils.test_types import hf_split_candidates, normalize_test_type_code, test_type_label
+from utils.test_types import hf_split_candidates, normalize_test_type_code, test_type_safety_type, test_type_slug
 from src.guardrail.guardrail import EMBGuard
 from src.inference_utils import run_parallel_inference
 from src.evals.utils import load_data, resolve_image, convert_messages_for_storage
@@ -218,7 +218,7 @@ class HeldoutSetEvaluator:
     
     def _resolve_image(self, item: Dict[str, Any], csv_dir: Optional[Path], is_hf_dataset: bool) -> Union[str, Path]:
         """
-        Resolve image from URL or Hugging Face dataset
+        Resolve image from image_path or Hugging Face dataset
         
         Args:
             item: Row/item dictionary containing image information
@@ -241,7 +241,7 @@ class HeldoutSetEvaluator:
                 temp_dir.mkdir(parents=True, exist_ok=True)
                 
                 # Generate filename from ID or index
-                image_id = item.get("ID", f"img_{item.get('idx', 'unknown')}")
+                image_id = item.get("id") or item.get("ID", f"img_{item.get('idx', 'unknown')}")
                 temp_path = temp_dir / f"{image_id}.jpg"
                 
                 # Save PIL image to temp file
@@ -250,41 +250,51 @@ class HeldoutSetEvaluator:
                     return temp_path
                 else:
                     return str(pil_image)
-            elif "URL" in item and item["URL"]:
-                # Fallback to URL if image column not available
-                image_url = item["URL"]
-                if Path(image_url).exists():
-                    return Path(image_url)
-                return image_url
             else:
+                image_path_value = (
+                    item.get("image_path", "")
+                    or item.get("source_path", "")
+                    or item.get("URL", "")
+                    or item.get("url", "")
+                )
+                if image_path_value:
+                    if Path(image_path_value).exists():
+                        return Path(image_path_value)
+                    return image_path_value
                 raise ValueError("No image found in Hugging Face dataset item")
         else:
             # For CSV files, resolve image path
-            image_url = item.get("URL", "")
-            if not image_url:
-                raise ValueError("No image URL found in CSV row")
+            image_path_value = (
+                item.get("image_path", "")
+                or item.get("source_path", "")
+                or item.get("URL", "")
+                or item.get("url", "")
+                or item.get("path", "")
+            )
+            if not image_path_value:
+                raise ValueError("No image path found in CSV row")
             
             # Image paths in CSV are relative to data/heldout_set
             if csv_dir:
-                image_path = csv_dir / image_url
+                image_path = csv_dir / image_path_value
                 if not image_path.exists():
-                    raise FileNotFoundError(f"Image not found: {image_url} (tried: {image_path})")
+                    raise FileNotFoundError(f"Image not found: {image_path_value} (tried: {image_path})")
                 return image_path
             else:
                 raise ValueError("csv_dir is required for CSV file images")
     
-    def _resolve_image_path(self, image_url: str, csv_dir: Path) -> Path:
+    def _resolve_image_path(self, image_path_value: str, csv_dir: Path) -> Path:
         """
-        Resolve image path from URL using heldout_set directory (backward compatibility)
+        Resolve image path using heldout_set directory
         
         Args:
-            image_url: Image URL from CSV (relative path)
+            image_path_value: Image path from CSV or dataset metadata
             csv_dir: Directory containing the CSV file (data/heldout_set)
             
         Returns:
             Resolved image path
         """
-        item = {"URL": image_url}
+        item = {"image_path": image_path_value}
         result = self._resolve_image(item, csv_dir, is_hf_dataset=False)
         if isinstance(result, Path):
             return result
@@ -368,31 +378,45 @@ class HeldoutSetEvaluator:
         for idx, row in df.iterrows():
             row_dict = row.to_dict() if hasattr(row, 'to_dict') else row
             
-            # Check for image (HF dataset has "image" column, CSV has "URL")
+            # Check for image (HF dataset has "image"; CSV/HF fallback has image_path).
             has_image = False
+            image_path_value = (
+                row_dict.get("image_path", "")
+                or row_dict.get("source_path", "")
+                or row_dict.get("URL", "")
+                or row_dict.get("url", "")
+                or row_dict.get("path", "")
+            )
             if is_hf_dataset:
                 if "image" in row_dict and row_dict["image"] is not None:
                     has_image = True
-                elif "URL" in row_dict and row_dict["URL"]:
+                elif image_path_value:
                     has_image = True
             else:
-                image_url = row_dict.get("URL", "")
-                if image_url and not (pd.isna(image_url) or image_url == ""):
+                if image_path_value and not (pd.isna(image_path_value) or image_path_value == ""):
                     has_image = True
             
             if not has_image:
                 continue  # Skip rows without image
             
-            # Get EMBGuardTest type code from CSV row.
-            row_type = normalize_test_type_code(row_dict.get("Type", ""), default="UNKNOWN") if "Type" in row_dict else "UNKNOWN"
+            # Get EMBGuardTest scenario type from normalized schema first, then legacy columns.
+            scenario_code = "UNKNOWN"
+            for type_column in ("scenario_type", "Type", "Subtype"):
+                if type_column in row_dict:
+                    scenario_code = normalize_test_type_code(row_dict.get(type_column, ""), default="UNKNOWN")
+                    if scenario_code != "UNKNOWN":
+                        break
+            safety_type = str(row_dict.get("type") or dataset_type or "").strip().lower()
+            if safety_type not in {"safe", "unsafe"}:
+                safety_type = test_type_safety_type(scenario_code) or "unknown"
             
             dataset.append({
                 "idx": int(idx),
                 "row": row_dict,
-                "image_url": row_dict.get("URL", ""),
+                "image_path": image_path_value,
                 "csv_dir": str(csv_dir) if csv_dir else None,
-                "type": row_type,
-                "type_label": test_type_label(row_type),
+                "type": safety_type,
+                "scenario_type": test_type_slug(scenario_code),
                 "is_hf_dataset": is_hf_dataset,
             })
         
@@ -420,7 +444,7 @@ class HeldoutSetEvaluator:
                 try:
                     # Extract action and image path from row
                     row_dict = item["row"]
-                    action = row_dict.get("Action", "")
+                    action = row_dict.get("action", "") or row_dict.get("Action", "")
                     if not action or action == "":
                         raise ValueError("Action field is missing or empty")
                     
@@ -451,9 +475,8 @@ class HeldoutSetEvaluator:
                     # Save result
                     result = {
                         "idx": item["idx"],
-                        "type": item["type"],  # EMBGuardTest type code from CSV
-                        "type_label": test_type_label(item["type"]),
-                        "dataset_type": dataset_type,  # safe or unsafe
+                        "type": item["type"],
+                        "scenario_type": item["scenario_type"],
                         "csv_row": row_dict,
                         "action": action,
                         "image_path": str(image_path),
@@ -465,8 +488,9 @@ class HeldoutSetEvaluator:
                     }
                     
                     # Include ID if present in CSV
-                    if "ID" in row_dict and row_dict.get("ID"):
-                        result["id"] = str(row_dict["ID"])
+                    row_id = row_dict.get("id") or row_dict.get("ID")
+                    if row_id:
+                        result["id"] = str(row_id)
                     
                     results.append(result)
                     total_cost += evaluation_result["cost"]
@@ -483,8 +507,7 @@ class HeldoutSetEvaluator:
                     error_result = {
                         "idx": item["idx"],
                         "type": item["type"],
-                        "type_label": test_type_label(item["type"]),
-                        "dataset_type": dataset_type,
+                        "scenario_type": item["scenario_type"],
                         "csv_row": item["row"],
                         "error": str(e),
                     }
@@ -492,7 +515,7 @@ class HeldoutSetEvaluator:
         else:
             # Parallel inference
             print(f"Starting parallel inference on {len(dataset)} items with {num_workers} workers...")
-            # Add dataset_type and type to worker_config for parallel processing
+            # Add split-level safety type for legacy parallel callers.
             worker_config["dataset_type"] = dataset_type
             results, total_cost, total_usage = run_parallel_inference(
                 dataset=dataset,
