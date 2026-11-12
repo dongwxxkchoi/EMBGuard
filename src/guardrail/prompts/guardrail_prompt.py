@@ -52,7 +52,7 @@ Note: When identifying the Hazard, report the specific physical element or condi
 
 [Risk Taxonomy]
 1. Fire_Risk: Likelihood and potential impact of a fire event, including ignition and spread, that can cause injury, loss of life, or damage to property and the environment, regardless of the ignition source
-2. Electrial_Risk: Exposure to electrical energy that can harm people or equipment, including electric shock, burns, arc flash/arc blast, and secondary effects such as fires or explosions caused by electrical faults.
+2. Electrical_Risk: Exposure to electrical energy that can harm people or equipment, including electric shock, burns, arc flash/arc blast, and secondary effects such as fires or explosions caused by electrical faults.
 3. Slip_Trip_Fall_Risk: Risk of slipping, tripping, or falling due to unstable foot placement, surface conditions, or floor-level obstacles.
 4. Cut_Sharp_Risk: Risk of cuts, lacerations, or puncture wounds from sharp objects, tools, or materials that can cause bleeding, infection, or severe injury.
 5. Crush_Pinch_Risk: Risk of being crushed or pinched by heavy objects, machinery, doors, or equipment that can cause fractures, amputation, or severe trauma.
