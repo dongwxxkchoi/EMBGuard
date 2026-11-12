@@ -83,7 +83,7 @@ HELDOUT_NUM_WORKERS="32"
 
 # Common configuration
 USE_FEW_SHOT="false"  # Set to "true" to enable few-shot examples
-USE_THINKING="true"   # Set to "true" to enable thinking mode (step-by-step reasoning)
+USE_THINKING="false"  # Set to "true" to enable thinking mode (step-by-step reasoning). Reported results use "false" (EMBGuard is trained on the non-thinking prompt)
 
 # Evaluation mode selection
 RUN_TEST_SET="true"      # Set to "false" to skip test set evaluation
